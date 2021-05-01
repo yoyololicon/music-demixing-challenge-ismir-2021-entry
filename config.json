@@ -1,0 +1,24 @@
+{
+    "root": "~/Datasets/musdb18hq/",
+    "save": "saved/",
+    "checkpoint": null,
+    "log_dir": "logs/",
+    "epochs": 1000,
+    "batch_size": 8,
+    "sampels_per_track": 64,
+    "cum_steps": 2,
+    "lr": 0.001,
+    "patience": 250,
+    "lr_decay_patience": 20,
+    "lr_decay_gamma": 0.3,
+    "weight_decay": 0.00001,
+    "seed": 2434,
+
+    "seq_dur": 6.0,
+    "nfft": 4096,
+    "nhop": 1024,
+    "hidden_size": 512,
+    "bandwidth": 16000,
+
+    "mcoef": 10
+}
