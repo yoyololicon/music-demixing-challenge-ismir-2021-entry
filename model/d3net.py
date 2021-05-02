@@ -1,5 +1,7 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
+from typing import Tuple, Dict, List
 
 
 class _Base(nn.Module):
@@ -12,27 +14,25 @@ class D2_block(_Base):
                  in_channels,
                  k,
                  L,
-                 last_n_layer=3):
+                 last_n_layers=3):
         super().__init__()
 
         self.in_channels = in_channels
         self.k = k
         self.L = L
-        self.last_N = last_n_layer
+        self.last_N = last_n_layers
 
         self.conv_layers = nn.ModuleList()
 
-        self.output_sizes = [k * (i + 1) for i in range(L)]
-        self.input_sizes = [in_channels] + [k * (i + 1) for i in range(L - 1)]
         for i in range(L):
             if i:
                 self.conv_layers.append(
                     nn.Sequential(
-                        nn.BatchNorm2d(self.input_sizes[i]),
+                        nn.BatchNorm2d(k),
                         nn.ReLU(inplace=True),
                         nn.Conv2d(
-                            self.input_sizes[i],
-                            sum(self.output_sizes[i:]),
+                            k,
+                            k * (L - i),
                             3,
                             padding=2 ** i,
                             dilation=2 ** i,
@@ -43,8 +43,8 @@ class D2_block(_Base):
             else:
                 self.conv_layers.append(
                     nn.Conv2d(
-                        self.input_sizes[i],
-                        sum(self.output_sizes[i:]),
+                        in_channels,
+                        k * L,
                         3,
                         padding=2 ** i,
                         dilation=2 ** i,
@@ -53,24 +53,26 @@ class D2_block(_Base):
                 )
 
     def get_output_channels(self):
-        return sum(self.output_sizes[-self.last_N:])
+        return self.k * min(self.L, self.last_N)
 
     def forward(self, input: torch.Tensor):
         # the input should be already BN + ReLU before
         x = self.conv_layers[0](input)
-        input, *skips = x.split(self.output_sizes, 1)
+        input, *skips = x.split([self.k] * self.L, 1)
 
         outputs = [input]
         for i in range(1, self.L):
             input, * \
                 tmp = self.conv_layers[i](input).split(
-                    self.output_sizes[i:], 1)
+                    [self.k] * (self.L - i), 1)
             outputs.append(input)
             input = input + skips.pop(0)
             skips = [s + t for s, t in zip(skips, tmp)]
 
         assert len(skips) == 0
-        return torch.cat(outputs[-self.last_N:], 1)
+        if self.last_N > 1 and len(outputs) > 1:
+            return torch.cat(outputs[-self.last_N:], 1)
+        return outputs[-1]
 
 
 class D3_block(_Base):
@@ -108,19 +110,215 @@ class D3_block(_Base):
         for bn, d2 in zip(self.bn_layers, self.d2_layers):
             bn_input = bn(input)
             bn_inputs.append(bn_input)
-            input = d2(torch.cat(bn_inputs, 1))
+            input = d2(torch.cat(bn_inputs, 1) if len(
+                bn_inputs) > 1 else bn_input)
             raw_inputs.append(input)
         return torch.cat(raw_inputs, 1)
 
 
-if __name__ == "__main__":
-    m = D3_block(
-        32, 2, 17, 8, last_n_layer=3
+class UNet(_Base):
+    def __init__(self,
+                 in_channels,
+                 down_specs: List[Dict],
+                 up_specs: List[Dict]):
+        super().__init__()
+
+        assert len(down_specs) == len(up_specs) + 1
+        self.down_layers = nn.ModuleList()
+        self.up_layers = nn.ModuleList()
+        self.transition_layers = nn.ModuleList()
+        self.tas_layers = nn.ModuleList()
+
+        skip_channels = []
+        for spec in down_specs:
+            if len(skip_channels):
+                self.transition_layers.append(
+                    nn.Sequential(
+                        nn.BatchNorm2d(in_channels),
+                        nn.ReLU(inplace=True),
+                        nn.Conv2d(in_channels, in_channels // 2, 1, bias=False)
+                    )
+                )
+                in_channels //= 2
+            self.down_layers.append(
+                D3_block(in_channels, **spec)
+            )
+            in_channels = self.down_layers[-1].get_output_channels()
+            skip_channels.append(in_channels)
+        skip_channels.pop()
+
+        self.register_buffer('tas_kernel', torch.tensor([[1, 2, 1],
+                                                         [2, 4, 2],
+                                                         [1, 2, 1]], dtype=torch.float32) * 0.25)
+
+        for spec, skip in zip(up_specs, skip_channels[::-1]):
+            self.tas_layers.append(
+                nn.Conv2d(in_channels, in_channels // 2, 1, bias=False)
+            )
+            in_channels //= 2
+            self.up_layers.append(
+                D3_block(in_channels + skip, **spec)
+            )
+            in_channels = self.up_layers[-1].get_output_channels()
+
+    def get_output_channels(self):
+        return self.up_layers[-1].get_output_channels()
+
+    def forward(self, x):
+        skips = []
+        for i, layer in enumerate(self.down_layers):
+            if i:
+                x = self.transition_layers[i-1](x)
+                x = F.avg_pool2d(x, 2, 2)
+            x = layer(x)
+            skips.append(x)
+        skips.pop()
+
+        for layer, ts, sk in zip(self.up_layers, self.tas_layers, skips[::-1]):
+            x = ts(x)
+            #x = x.repeat_interleave(2, 2).repeat_interleave(2, 3)
+            expand_kernel = self.tas_kernel[None, None, ...].expand(
+                x.shape[1], -1, -1, -1)
+            x = F.conv_transpose2d(
+                x, expand_kernel, stride=2, padding=1, groups=x.shape[1])
+            if sk.shape[2] > x.shape[2] or sk.shape[3] > x.shape[3]:
+                x = F.pad(x, [0, sk.shape[3] - x.shape[3],
+                              0, sk.shape[2] - x.shape[2]])
+            x = layer(torch.cat([x, sk], 1))
+        return x
+
+
+class D3Net(nn.Module):
+    def __init__(self,
+                 freq_split_idx: int,
+                 low_specs: Tuple[List[Dict], List[Dict]],
+                 hi_specs: Tuple[List[Dict], List[Dict]],
+                 full_specs: Tuple[List[Dict], List[Dict]],
+                 last_n_layers=1):
+        super().__init__()
+
+        self.freq_split_idx = freq_split_idx
+
+        for spec_list in low_specs + hi_specs + full_specs:
+            for spec in spec_list:
+                spec['last_n_layers'] = last_n_layers
+
+        self.low = nn.Sequential(
+            nn.Conv2d(2, 32, 3, padding=1, bias=False),
+            UNet(32, low_specs[0], low_specs[1])
+        )
+
+        unet = UNet(8, hi_specs[0], hi_specs[1])
+        self.high = nn.Sequential(
+            nn.Conv2d(2, 8, 3, padding=1, bias=False),
+            unet,
+            nn.Conv2d(unet.get_output_channels(),
+                      self.low[1].get_output_channels(), 1, bias=False)
+        )
+        self.full = nn.Sequential(
+            nn.Conv2d(2, 32, 3, padding=1, bias=False),
+            UNet(32, full_specs[0], full_specs[1])
+        )
+
+        in_channels = self.low[1].get_output_channels(
+        ) + self.full[1].get_output_channels()
+
+        d2 = D2_block(in_channels, 12, 3, last_n_layers=3)
+        in_channels = d2.get_output_channels()
+        self.final = nn.Sequential(
+            d2,
+            nn.BatchNorm2d(in_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_channels, 2, 3, padding=1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, spec):
+        spec = spec[:, :, :1600]
+        low_spec, high_spec = spec.split(
+            [self.freq_split_idx, 1600 - self.freq_split_idx], 2)
+
+        low = self.low(low_spec)
+        high = self.high(high_spec)
+        full = self.full(spec)
+
+        final = torch.cat([torch.cat([low, high], 2), full], 1)
+        return self.final(final)
+
+
+def get_vocals_model(last_n_layers=1):
+    return D3Net(
+        256,
+        (
+            [
+                {'k': 16, 'L': 5, 'M': 2},
+                {'k': 18, 'L': 5, 'M': 2},
+                {'k': 20, 'L': 5, 'M': 2},
+                {'k': 22, 'L': 5, 'M': 2},
+            ],
+            [
+                {'k': 20, 'L': 4, 'M': 2},
+                {'k': 18, 'L': 4, 'M': 2},
+                {'k': 16, 'L': 4, 'M': 2}
+            ]
+        ),
+        (
+            [
+                {'k': 2, 'L': 1, 'M': 1},
+                {'k': 2, 'L': 1, 'M': 1},
+                {'k': 2, 'L': 1, 'M': 1},
+                {'k': 2, 'L': 1, 'M': 1}
+            ],
+            [
+                {'k': 2, 'L': 1, 'M': 1},
+                {'k': 2, 'L': 1, 'M': 1},
+                {'k': 2, 'L': 1, 'M': 1}
+            ]
+        ),
+        (
+            [
+                {'k': 13, 'L': 4, 'M': 2},
+                {'k': 14, 'L': 5, 'M': 2},
+                {'k': 15, 'L': 6, 'M': 2},
+                {'k': 16, 'L': 7, 'M': 2},
+                {'k': 17, 'L': 8, 'M': 2},
+            ],
+            [
+                {'k': 16, 'L': 6, 'M': 2},
+                {'k': 14, 'L': 5, 'M': 2},
+                {'k': 12, 'L': 4, 'M': 2},
+                {'k': 11, 'L': 4, 'M': 2}
+            ]
+        ),
+        last_n_layers
     )
 
-    print(m.get_output_channels())
-    print(m)
 
-    x = torch.rand(1, 32, 256, 256)
+if __name__ == "__main__":
+    m = get_vocals_model().cuda()  # .half()
+    # print(m)
+    #torch.save(m, 'model_size_test.pth')
+    x = torch.rand(1, 2, 2049, 256).cuda()  # .half()
     y = m(x)
     print(y.shape)
+    exit(0)
+    # m = D2_block(32, 6, 4, 4)
+    #m = D3_block(32, 2, k=13, L=5)
+    m = UNet(
+        32,
+        [
+            {'k': 16, 'L': 5, 'M': 2},
+            {'k': 18, 'L': 5, 'M': 2},
+            {'k': 20, 'L': 5, 'M': 2},
+            {'k': 22, 'L': 5, 'M': 2},
+        ],
+        [
+            {'k': 20, 'L': 4, 'M': 2},
+            {'k': 18, 'L': 4, 'M': 2},
+            {'k': 16, 'L': 4, 'M': 2}
+        ]
+    ).cuda()
+    print(m)
+    print(m.get_output_channels())
+    print(m)
+    print(m.get_output_channels())
