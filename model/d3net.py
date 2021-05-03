@@ -58,13 +58,12 @@ class D2_block(_Base):
     def forward(self, input: torch.Tensor):
         # the input should be already BN + ReLU before
         x = self.conv_layers[0](input)
-        input, *skips = x.split([self.k] * self.L, 1)
+        input, *skips = x.chunk(self.L, 1)
 
         outputs = [input]
         for i in range(1, self.L):
             input, * \
-                tmp = self.conv_layers[i](input).split(
-                    [self.k] * (self.L - i), 1)
+                tmp = self.conv_layers[i](input).chunk(self.L - i, 1)
             outputs.append(input)
             input = input + skips.pop(0)
             skips = [s + t for s, t in zip(skips, tmp)]
@@ -147,13 +146,12 @@ class UNet(_Base):
             skip_channels.append(in_channels)
         skip_channels.pop()
 
-        self.register_buffer('tas_kernel', torch.tensor([[1, 2, 1],
-                                                         [2, 4, 2],
-                                                         [1, 2, 1]], dtype=torch.float32) * 0.25)
+        self.register_buffer('tas_kernel', torch.ones(1, 1, 2, 2) * 0.25)
 
         for spec, skip in zip(up_specs, skip_channels[::-1]):
             self.tas_layers.append(
-                nn.Conv2d(in_channels, in_channels // 2, 1, bias=False)
+                nn.ConvTranspose2d(in_channels, in_channels // 2,
+                                   1, stride=1, bias=False)
             )
             in_channels //= 2
             self.up_layers.append(
@@ -169,6 +167,9 @@ class UNet(_Base):
         for i, layer in enumerate(self.down_layers):
             if i:
                 x = self.transition_layers[i-1](x)
+                if x.shape[2] % 2 or x.shape[3] % 2:
+                    x = F.pad(x, [0, x.shape[3] %
+                                  2, 0, x.shape[2] % 2], mode='replicate')
                 x = F.avg_pool2d(x, 2, 2)
             x = layer(x)
             skips.append(x)
@@ -177,14 +178,9 @@ class UNet(_Base):
         for layer, ts, sk in zip(self.up_layers, self.tas_layers, skips[::-1]):
             x = ts(x)
             #x = x.repeat_interleave(2, 2).repeat_interleave(2, 3)
-            expand_kernel = self.tas_kernel[None, None, ...].expand(
-                x.shape[1], -1, -1, -1)
-            x = F.conv_transpose2d(
-                x, expand_kernel, stride=2, padding=1, groups=x.shape[1])
-            if sk.shape[2] > x.shape[2] or sk.shape[3] > x.shape[3]:
-                x = F.pad(x, [0, sk.shape[3] - x.shape[3],
-                              0, sk.shape[2] - x.shape[2]])
-            x = layer(torch.cat([x, sk], 1))
+            x = F.conv_transpose2d(x, self.tas_kernel.expand(
+                x.shape[1], -1, -1, -1), stride=2, groups=x.shape[1])
+            x = layer(torch.cat([x[..., :sk.shape[2], :sk.shape[3]], sk], 1))
         return x
 
 
@@ -203,9 +199,14 @@ class D3Net(nn.Module):
             for spec in spec_list:
                 spec['last_n_layers'] = last_n_layers
 
+        self.full = nn.Sequential(
+            nn.Conv2d(2, 32, 3, padding=1, bias=False),
+            UNet(32, full_specs[0], full_specs[1])
+        )
+        unet = UNet(32, low_specs[0], low_specs[1])
         self.low = nn.Sequential(
             nn.Conv2d(2, 32, 3, padding=1, bias=False),
-            UNet(32, low_specs[0], low_specs[1])
+            unet,
         )
 
         unet = UNet(8, hi_specs[0], hi_specs[1])
@@ -215,35 +216,32 @@ class D3Net(nn.Module):
             nn.Conv2d(unet.get_output_channels(),
                       self.low[1].get_output_channels(), 1, bias=False)
         )
-        self.full = nn.Sequential(
-            nn.Conv2d(2, 32, 3, padding=1, bias=False),
-            UNet(32, full_specs[0], full_specs[1])
-        )
 
-        in_channels = self.low[1].get_output_channels(
-        ) + self.full[1].get_output_channels()
+        in_channels = self.full[1].get_output_channels(
+        ) + self.low[1].get_output_channels()
 
         d2 = D2_block(in_channels, 12, 3, last_n_layers=3)
-        in_channels = d2.get_output_channels()
+        out_channels = d2.get_output_channels()
         self.final = nn.Sequential(
-            d2,
             nn.BatchNorm2d(in_channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(in_channels, 2, 3, padding=1),
-            nn.Sigmoid()
+            d2,
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, 2, 3, padding=1)
         )
 
     def forward(self, spec):
-        spec = spec[:, :, :1600]
-        low_spec, high_spec = spec.split(
-            [self.freq_split_idx, 1600 - self.freq_split_idx], 2)
-
+        low_spec, high_spec = spec[:, :,
+                                   :self.freq_split_idx], spec[:, :, self.freq_split_idx:1600]
+        full_spec = spec[:, :, :1600]
         low = self.low(low_spec)
         high = self.high(high_spec)
-        full = self.full(spec)
+        full = self.full(full_spec)
 
-        final = torch.cat([torch.cat([low, high], 2), full], 1)
-        return self.final(final)
+        hi_low = torch.cat([low, high], 2)
+        final = torch.cat([hi_low, full], 1)
+        return F.pad(self.final(final), [0, 0, 0, spec.shape[2] - 1600], value=-15)
 
 
 def get_vocals_model(last_n_layers=1):
@@ -284,8 +282,8 @@ def get_vocals_model(last_n_layers=1):
                 {'k': 17, 'L': 8, 'M': 2},
             ],
             [
-                {'k': 16, 'L': 6, 'M': 2},
-                {'k': 14, 'L': 5, 'M': 2},
+                {'k': 14, 'L': 6, 'M': 2},
+                {'k': 13, 'L': 5, 'M': 2},
                 {'k': 12, 'L': 4, 'M': 2},
                 {'k': 11, 'L': 4, 'M': 2}
             ]
