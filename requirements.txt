@@ -1,0 +1,6 @@
+pytorch-ignite
+torch-optimizer
+musdb
+soundfile
+tensorboard
+tensorboardX
