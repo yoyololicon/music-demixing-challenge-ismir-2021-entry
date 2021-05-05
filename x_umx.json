@@ -3,6 +3,7 @@
     "arch": {
         "type": "X_UMX",
         "args": {
+            "n_fft": 4096,
             "hidden_channels": 512,
             "max_bins": 1600,
             "nb_channels": 2,
@@ -77,14 +78,20 @@
         "log_dir": "runs/",
         "cum_steps": 2,
         "patience": 250,
-        "amp_enabled": true,
-        "target": [
+        "amp_enabled": false,
+        "val_epoch_length": null,
+        "validate_every": 4,
+        "targets": [
             "vocals",
             "drums",
             "bass",
             "other"
         ],
         "n_fft": 4096,
-        "hop_length": 1024
+        "hop_length": 1024,
+        "extra_monitor": [
+            "loss_f",
+            "loss_t"
+        ]
     }
 }

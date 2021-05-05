@@ -32,7 +32,7 @@ class FastMUSDB(Dataset):
                  random=False,
                  random_track_mix=False,
                  ):
-        self.root = root
+        self.root = os.path.expanduser(root)
         self.seq_duration = seq_duration
         self.subsets = subsets
         self.sr = 44100

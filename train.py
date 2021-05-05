@@ -1,73 +1,36 @@
+from collections import namedtuple
 import random
 import torch
 from torch.utils.data import DataLoader
 from torch import optim
+from torch.cuda import amp
 import argparse
+import json
+from datetime import datetime
+import os
 from ignite.engine import Engine, Events
-from ignite.metrics import Loss, RunningAverage
+from ignite.metrics import RunningAverage, Average
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
 from ignite.handlers import EarlyStopping, ModelCheckpoint, TerminateOnNan, Checkpoint
 from ignite.contrib.handlers.tensorboard_logger import *
 
-from dataset import FastMUSDB
-from loss import bce_loss, mse_loss, sdr_loss
-from model import X_UMX
+import dataset as module_data
+import loss as module_loss
+import model as module_arch
 
-parser = argparse.ArgumentParser(
-    description='OpenUnmix_CrossNet(X-UMX) Trainer')
+from utils import get_instance
 
-# Dataset paramaters
-parser.add_argument('root', type=str, help='root path of dataset')
-parser.add_argument('--save', type=str, default="saved/")
+
+parser = argparse.ArgumentParser(description='SS Trainer')
+
+parser.add_argument('config', type=str, help='config file')
 parser.add_argument('--checkpoint', type=str, default=None)
-parser.add_argument('--log-dir', type=str, default='logs/')
-
-# Trainig Parameters
-parser.add_argument('--epochs', type=int, default=1000)
-parser.add_argument('--batch-size', type=int, default=8)
-parser.add_argument('--samples-per-track', type=int, default=64)
-parser.add_argument('--cum-steps', type=int, default=2)
-parser.add_argument('--lr', type=float, default=0.001,
-                    help='learning rate, defaults to 1e-3')
-parser.add_argument('--patience', type=int, default=250,
-                    help='minimum number of bad epochs for EarlyStoping (default: 250)')
-parser.add_argument('--lr-decay-patience', type=int, default=20,
-                    help='lr decay patience for plateau scheduler')
-parser.add_argument('--lr-decay-gamma', type=float, default=0.3,
-                    help='gamma of learning rate scheduler decay')
-parser.add_argument('--weight-decay', type=float, default=0.00001,
-                    help='weight decay')
-parser.add_argument('--seed', type=int, default=2434, metavar='S',
-                    help='random seed (default: 2434)')
-
-# Model Parameters
-parser.add_argument('--seq-dur', type=float, default=6.0,
-                    help='Sequence duration in seconds per trainig batch'
-                    'value of <=0.0 will use full/variable length')
-parser.add_argument('--nfft', type=int, default=4096,
-                    help='STFT fft size and window size')
-parser.add_argument('--nhop', type=int, default=1024,
-                    help='STFT hop size')
-parser.add_argument('--hidden-size', type=int, default=512,
-                    help='hidden size parameter of dense bottleneck layers')
-parser.add_argument('--bandwidth', type=int, default=16000,
-                    help='maximum model bandwidth in herz')
-
-# Misc Parameters
-parser.add_argument('--mcoef', type=float, default=10.0,
-                    help='coefficient for mixing: mfoef*TD-Loss + FD-Loss')
-
-# The duration of validation sample
-parser.add_argument('--valid-dur', type=float, default=10.0,
-                    help='Split duration for validation sample to avoid GPU memory overflow')
 
 args = parser.parse_args()
 
-epochs = args.epochs
-batch = args.batch_size
-samples_per_track = args.samples_per_track
-accumulation_steps = args.cum_steps
-mcoef = args.mcoef
+config_file = args.config
+checkpoint_file = args.checkpoint
+config = json.load(open(config_file))
 
 
 if torch.cuda.is_available():
@@ -76,118 +39,125 @@ if torch.cuda.is_available():
 else:
     device = 'cpu'
 
-# train_data = MUSDataset(args.root, subsets='train', split='train',
-#                        seq_duration=args.seq_dur, size=epoch_steps * batch)
-train_data = FastMUSDB(
-    args.root, subsets='train', split='train', seq_duration=args.seq_dur, samples_per_track=samples_per_track,
-    random=True, random_track_mix=True)
-val_data = FastMUSDB(
-    args.root, subsets='train', split='valid', seq_duration=args.seq_dur, random=False)
+train_data = get_instance(module_data, config['dataset']['train'])
+val_data = get_instance(module_data, config['dataset']['valid'])
 
-train_loader = DataLoader(train_data, batch, num_workers=2, shuffle=True, drop_last=True,
-                          pin_memory=True if device == 'cuda' else False, prefetch_factor=4)
-val_loader = DataLoader(val_data, batch, num_workers=2,
-                        pin_memory=True if device == 'cuda' else False, prefetch_factor=4)
+train_loader = DataLoader(train_data, **config['data_loader']['train'])
+val_loader = DataLoader(val_data, **config['data_loader']['valid'])
 
-sr = train_data.sr
-max_bins = int(args.bandwidth / sr * args.nfft) + 1
-
-model = X_UMX(args.nfft, args.nhop, args.hidden_size,
-              max_bins, 2, 3).to(device)
-optimizer = optim.Adam(model.parameters(), args.lr,
-                       weight_decay=args.weight_decay)
-scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-    optimizer, factor=args.lr_decay_gamma, patience=args.lr_decay_patience, verbose=True)
+model = get_instance(module_arch, config['arch']).to(device)
+optimizer = get_instance(optim, config['optimizer'], model.parameters())
+scheduler = get_instance(optim.lr_scheduler, config['lr_scheduler'], optimizer)
+criterion = get_instance(module_loss, config['loss']).to(device)
 
 
 print('Trainable parameters: {}'.format(sum(p.numel()
                                             for p in model.parameters() if p.requires_grad)))
 
+trainer_args = namedtuple("trainer_args", config['trainer'].keys())(
+    *config['trainer'].values())
 
-def combine_loss(loss_f, loss_t):
-    return loss_f + mcoef * loss_t
+# get target index
+targets_idx = []
+for t in trainer_args.targets:
+    targets_idx.append(train_data.sources.index(t))
+assert len(targets_idx) > 0
+targets_idx = sorted(targets_idx)
+
+amp_enabled = trainer_args.amp_enabled
+n_fft = trainer_args.n_fft
+hop_length = trainer_args.hop_length
+accumulation_steps = trainer_args.cum_steps
+
+scaler = amp.GradScaler(enabled=amp_enabled)
+spec = module_arch.Spec(n_fft, hop_length).to(device)
 
 
 def process_function(engine, batch):
     model.train()
 
     x, y = batch
+    y = y[:, targets_idx].squeeze(1)
     x, y = x.to(device), y.to(device)
 
-    X = model.t2f(x)
-    Y = model.t2f(y)
-    Xmag = X.abs()
-    pred_mask = model(Xmag)
+    X = spec(x)
+    Y = spec(y)
+    input = X.abs()
+    with amp.autocast(enabled=amp_enabled):
+        pred_mask = model(input)
 
-    xpred = model.f2t(pred_mask * X.unsqueeze(1), length=x.shape[-1])
-    loss_f = mse_loss(pred_mask, Y, X)
-    loss_t = sdr_loss(xpred, y, x)
-    loss = combine_loss(loss_f, loss_t)
+    loss, extra_losses = criterion(pred_mask, Y, X, y, x)
     loss /= accumulation_steps
-    loss.backward()
+    scaler.scale(loss).backward()
 
     if engine.state.iteration % accumulation_steps == 0:
-        optimizer.step()
+        scaler.step(optimizer)
+        scaler.update()
         optimizer.zero_grad()
 
-    return loss.item() * accumulation_steps, loss_f.item(), loss_t.item()
+    result = {'loss': loss.item() * accumulation_steps}
+    result.update(extra_losses)
+    return result
 
 
 def evaluate_function(engine, batch):
     model.eval()
     with torch.no_grad():
         x, y = batch
+        y = y[:, targets_idx].squeeze(1)
         x, y = x.to(device), y.to(device)
 
-        X = model.t2f(x)
-        Y = model.t2f(y)
-        Xmag = X.abs()
-        pred_mask = model(Xmag)
+        X = spec(x)
+        Y = spec(y)
+        input = X.abs()
+        with amp.autocast(enabled=amp_enabled):
+            pred_mask = model(input)
 
-        xpred = model.f2t(pred_mask * X.unsqueeze(1), length=x.shape[-1])
-        return xpred, y, x, pred_mask, Y, X
+        loss, extra_losses = criterion(pred_mask, Y, X, y, x)
+
+        result = {'loss': loss.item()}
+        result.update(extra_losses)
+        return result
 
 
 trainer = Engine(process_function)
 evaluator = Engine(evaluate_function)
 
-RunningAverage(output_transform=lambda x: x[0]).attach(trainer, 'loss')
-RunningAverage(output_transform=lambda x: x[1]).attach(trainer, 'loss_f')
-RunningAverage(output_transform=lambda x: x[2]).attach(trainer, 'loss_t')
-#RunningAverage(output_transform=lambda x: x[3]).attach(trainer, 'loss_f(bce)')
-
-Loss(mse_loss, output_transform=lambda x: [
-     x[3], x[4], {"mix_spec": x[5]}]).attach(evaluator, 'loss_f')
-Loss(sdr_loss, output_transform=lambda x: [
-     x[0], x[1], {"mix": x[2]}]).attach(evaluator, 'loss_t')
-# Loss(bce_loss, output_transform=lambda x: [
-#     x[3], x[4]]).attach(evaluator, 'loss_f(bce)')
+extra_monitor = trainer_args.extra_monitor
+RunningAverage(output_transform=lambda x: x['loss']).attach(trainer, 'loss')
+Average(output_transform=lambda x: x['loss']).attach(evaluator, 'loss')
+for k in extra_monitor:
+    RunningAverage(output_transform=lambda x, m=k: x[m]).attach(trainer, k)
+    Average(output_transform=lambda x, m=k: x[m]).attach(evaluator, k)
 
 
 @trainer.on(Events.EPOCH_COMPLETED)
 def print_trainer_logs(engine):
     avg_loss = engine.state.metrics['loss']
-    avg_loss_f = engine.state.metrics['loss_f']
-    avg_loss_t = engine.state.metrics['loss_t']
-    print("Trainer Results - Epoch {} - Avg loss: {:.2f} Avg loss_f: {:.2f} Avg loss_t: {:.2f}"
-          .format(engine.state.epoch, avg_loss, avg_loss_f, avg_loss_t))
+    output_str = "Trainer Results - Epoch {} - Avg loss: {:.2f}".format(
+        engine.state.epoch, avg_loss)
+    for k in extra_monitor:
+        output_str += " Avg " + k + ": {:.2f}".format(engine.state.metrics[k])
+    print(output_str)
 
 
 def print_logs(engine, dataloader):
     evaluator.run(dataloader, max_epochs=1)
     metrics = evaluator.state.metrics
-    avg_loss_f = metrics['loss_f']
-    avg_loss_t = metrics['loss_t']
-    avg_loss = combine_loss(avg_loss_f, avg_loss_t)
-
+    avg_loss = metrics['loss']
     scheduler.step(avg_loss)
 
-    print("Evaluater Results - Epoch {} - Avg loss: {:.2f} Avg loss_f: {:.2f} Avg loss_t: {:.2f}"
-          .format(engine.state.epoch, avg_loss, avg_loss_f, avg_loss_t))
+    output_str = "Evaluater Results - Epoch {} - Avg loss: {:.2f}".format(
+        engine.state.epoch, avg_loss)
+    for k in extra_monitor:
+        output_str += " Avg " + k + ": {:.2f}".format(metrics[k])
+    print(output_str)
 
 
+validate_every = trainer_args.validate_every
+val_epoch_length = trainer_args.val_epoch_length
 trainer.add_event_handler(Events.EPOCH_COMPLETED(
-    every=4), print_logs, val_loader)
+    every=validate_every), print_logs, val_loader)
 
 # Tqdm
 
@@ -195,7 +165,11 @@ pbar = ProgressBar(persist=True)
 pbar.attach(trainer, 'all')
 
 # Create a logger
-tb_logger = TensorboardLogger()
+model_name = config['name']
+log_dir = trainer_args.log_dir
+start_time = datetime.now().strftime('%m%d_%H%M%S')
+tb_logger = TensorboardLogger(
+    log_dir=os.path.join(log_dir, model_name, start_time))
 tb_logger.attach_output_handler(
     trainer,
     event_name=Events.ITERATION_COMPLETED,
@@ -224,25 +198,26 @@ tb_logger.attach_opt_params_handler(
 # early stop
 
 def score_function(engine):
-    return -combine_loss(engine.state.metrics['loss_f'], engine.state.metrics['loss_t'])
+    return -engine.state.metrics['loss']
 
 
-handler = EarlyStopping(patience=args.patience,
-                        score_function=score_function, trainer=trainer)
+patience = trainer_args.patience
+handler = EarlyStopping(
+    patience=patience, score_function=score_function, trainer=trainer)
 evaluator.add_event_handler(Events.COMPLETED, handler)
 
-
+save_dir = trainer_args.save_dir
 checkpointer = ModelCheckpoint(
-    args.save, 'x-umx', n_saved=2, create_dir=True, require_empty=False,
-    score_function=score_function, score_name="negative_loss")
+    save_dir, model_name, n_saved=2, create_dir=True, require_empty=False)
 to_save = {
     'model': model,
     'optimizer': optimizer,
     'scheduler': scheduler,
     'trainer': trainer,
+    'scaler': scaler
 }
-evaluator.add_event_handler(
-    Events.COMPLETED,
+trainer.add_event_handler(
+    Events.EPOCH_COMPLETED,
     checkpointer,
     to_save
 )
@@ -252,19 +227,26 @@ def predict_samples(engine):
     model.eval()
     with torch.no_grad():
         x, _ = val_data[random.randrange(len(val_data))]
-        x = torch.from_numpy(x).to(device).unsqueeze(0)
+        x = torch.from_numpy(x)
+        tb_logger.writer.add_audio('mixture', x.t(), engine.state.epoch)
 
-        X = model.t2f(x)
-        Xmag = X.abs()
-        pred_mask = model(Xmag)
+        X = spec(x.to(device))
+        input = X.abs()
+        with amp.autocast(enabled=amp_enabled):
+            pred_mask = model(input.unsqueeze(0)).squeeze()
 
-        xpred = model.f2t(pred_mask * X.unsqueeze(1),
-                          length=x.shape[-1]).squeeze().transpose(1, 2).cpu().clip(-1, 1)
-        tb_logger.writer.add_audio(
-            'mixture', x.squeeze().t().cpu(), engine.state.epoch)
-        for i in range(4):
+        xpred = spec(pred_mask * (X.unsqueeze(1) if len(targets_idx)
+                                  > 1 else X), inverse=True).cpu().clip(-1, 1)
+
+        if len(targets_idx) > 1:
+            xpred = xpred.transpose(1, 2)
+            for i, t in enumerate(targets_idx):
+                tb_logger.writer.add_audio(
+                    val_data.sources[t], xpred[i], engine.state.epoch)
+        else:
+            xpred = xpred.t()
             tb_logger.writer.add_audio(
-                val_data.sources[i], xpred[i], engine.state.epoch)
+                val_data.sources[targets_idx[0]], xpred, engine.state.epoch)
 
 
 trainer.add_event_handler(Events.EPOCH_COMPLETED, predict_samples)
@@ -275,6 +257,8 @@ if args.checkpoint:
 
 
 trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
+
+epochs = trainer_args.epochs
 
 e = trainer.run(train_loader, max_epochs=epochs)
 

@@ -7,7 +7,6 @@ class X_UMX(nn.Module):
     def __init__(
         self,
         n_fft=4096,
-        hop_length=1024,
         hidden_channels=512,
         max_bins=None,
         nb_channels=2,
@@ -22,11 +21,8 @@ class X_UMX(nn.Module):
             self.max_bins = self.nb_output_bins
         self.hidden_channels = hidden_channels
         self.n_fft = n_fft
-        self.hop_length = hop_length
         self.nb_channels = nb_channels
         self.nb_layers = nb_layers
-
-        self.register_buffer('window', torch.hann_window(n_fft))
 
         self.input_means = nn.Parameter(torch.zeros(4 * self.max_bins))
         # self.input_scale = nn.Parameter(torch.ones(4 * self.max_bins))
@@ -74,34 +70,6 @@ class X_UMX(nn.Module):
                       nb_channels * self.nb_output_bins * 4, 1, bias=False, groups=4),
             nn.BatchNorm1d(nb_channels * self.nb_output_bins * 4),
         )
-
-    def t2f(self, x):
-        # (batch, channels, time)
-
-        shape = x.shape
-        x = x.reshape(-1, x.shape[-1])
-        spec = torch.stft(
-            x,
-            self.n_fft,
-            self.hop_length,
-            self.n_fft,
-            self.window,
-            return_complex=True
-        )
-        # (batch, channels, nfft // 2 + 1, frames)
-        return spec.view(*shape[:-1], *spec.shape[-2:])
-
-    def f2t(self, spec, length=None):
-        shape = spec.shape
-        spec = spec.reshape(-1, *shape[-2:])
-        return torch.istft(
-            spec,
-            self.n_fft,
-            self.hop_length,
-            self.n_fft,
-            self.window,
-            length=length,
-        ).view(*shape[:-2], -1)
 
     def forward(self, spec: torch.Tensor):
         batch, channels, bins, frames = spec.shape
