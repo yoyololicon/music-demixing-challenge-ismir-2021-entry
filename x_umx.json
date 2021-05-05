@@ -1,0 +1,90 @@
+{
+    "name": "CrossNet Open-Unmix",
+    "arch": {
+        "type": "X_UMX",
+        "args": {
+            "hidden_channels": 512,
+            "max_bins": 1600,
+            "nb_channels": 2,
+            "nb_layers": 3
+        }
+    },
+    "dataset": {
+        "train": {
+            "type": "FastMUSDB",
+            "args": {
+                "root": "~/Datasets/musdb18hq/",
+                "subsets": "train",
+                "split": null,
+                "seq_duration": 6.0,
+                "samples_per_track": 64,
+                "random": true,
+                "random_track_mix": true
+            }
+        },
+        "valid": {
+            "type": "FastMUSDB",
+            "args": {
+                "root": "~/Datasets/musdb18hq/",
+                "subsets": "test",
+                "split": null,
+                "seq_duration": 6.0
+            }
+        }
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args": {
+            "lr": 1e-3,
+            "weight_decay": 1e-5
+        }
+    },
+    "loss": {
+        "type": "CLoss",
+        "args": {
+            "mcoeff": 10,
+            "n_fft": 4096,
+            "hop_length": 1024
+        }
+    },
+    "lr_scheduler": {
+        "type": "ReduceLROnPlateau",
+        "args": {
+            "factor": 0.3,
+            "patience": 10,
+            "verbose": true
+        }
+    },
+    "data_loader": {
+        "train": {
+            "batch_size": 8,
+            "shuffle": true,
+            "drop_last": true,
+            "num_workers": 2,
+            "prefetch_factor": 4,
+            "pin_memory": true
+        },
+        "valid": {
+            "batch_size": 8,
+            "num_workers": 2,
+            "prefetch_factor": 4,
+            "pin_memory": true
+        }
+    },
+    "trainer": {
+        "epochs": 1000,
+        "save_dir": "saved/",
+        "log_dir": "runs/",
+        "cum_steps": 2,
+        "patience": 250,
+        "amp_enabled": true,
+        "target": [
+            "vocals",
+            "drums",
+            "bass",
+            "other"
+        ],
+        "n_fft": 4096,
+        "hop_length": 1024
+    }
+}
