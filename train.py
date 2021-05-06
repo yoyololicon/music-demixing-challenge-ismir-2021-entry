@@ -30,9 +30,7 @@ parser.add_argument('--checkpoint', type=str, default=None,
 
 args = parser.parse_args()
 
-config_file = args.config
-checkpoint_file = args.checkpoint
-config = json.load(open(config_file))
+config = json.load(open(args.config))
 
 
 if torch.cuda.is_available():
@@ -66,22 +64,20 @@ except AttributeError:
 print('Trainable parameters: {}'.format(sum(p.numel()
                                             for p in model.parameters() if p.requires_grad)))
 
-trainer_args = namedtuple("trainer_args", config['trainer'].keys())(
-    *config['trainer'].values())
 
 model_name = config['name']
-log_dir = trainer_args.log_dir
-save_dir = trainer_args.save_dir
-targets = trainer_args.targets
-amp_enabled = trainer_args.amp_enabled
-n_fft = trainer_args.n_fft
-hop_length = trainer_args.hop_length
-accumulation_steps = trainer_args.cum_steps
-extra_monitor = trainer_args.extra_monitor
-validate_every = trainer_args.validate_every
-val_epoch_length = trainer_args.val_epoch_length
-patience = trainer_args.patience
-epochs = trainer_args.epochs
+log_dir = config['trainer']['log_dir']
+save_dir = config['trainer']['save_dir']
+targets = config['trainer']['targets']
+amp_enabled = config['trainer']['amp_enabled']
+n_fft = config['trainer']['n_fft']
+hop_length = config['trainer']['hop_length']
+accumulation_steps = config['trainer']['cum_steps']
+extra_monitor = config['trainer']['extra_monitor']
+validate_every = config['trainer']['validate_every']
+val_epoch_length = config['trainer']['val_epoch_length']
+patience = config['trainer']['patience']
+epochs = config['trainer']['epochs']
 
 # get target index
 targets_idx = []
@@ -104,9 +100,9 @@ def process_function(engine, batch):
 
     X = spec(x)
     Y = spec(y)
-    input = X.abs()
+    X_mag = X.abs()
     with amp.autocast(enabled=amp_enabled):
-        pred_mask = model(input)
+        pred_mask = model(X_mag)
 
     loss, extra_losses = criterion(pred_mask, Y, X, y, x)
     loss /= accumulation_steps
@@ -131,9 +127,9 @@ def evaluate_function(engine, batch):
 
         X = spec(x)
         Y = spec(y)
-        input = X.abs()
+        X_mag = X.abs()
         with amp.autocast(enabled=amp_enabled):
-            pred_mask = model(input)
+            pred_mask = model(X_mag)
 
         loss, extra_losses = criterion(pred_mask, Y, X, y, x)
 
@@ -155,10 +151,9 @@ for k in extra_monitor:
 @trainer.on(Events.EPOCH_COMPLETED)
 def print_trainer_logs(engine):
     avg_loss = engine.state.metrics['loss']
-    output_str = "Trainer Results - Epoch {} - Avg loss: {:.2f}".format(
-        engine.state.epoch, avg_loss)
+    output_str = f'Trainer Results - Epoch {engine.state.epoch} - Avg loss: {avg_loss:.2f}'
     for k in extra_monitor:
-        output_str += " Avg " + k + ": {:.2f}".format(engine.state.metrics[k])
+        output_str += f' Avg {k}: {engine.state.metrics[k]:.2f}'
     print(output_str)
 
 
@@ -168,10 +163,9 @@ def print_logs(engine, dataloader):
     avg_loss = metrics['loss']
     scheduler.step(avg_loss)
 
-    output_str = "Evaluater Results - Epoch {} - Avg loss: {:.2f}".format(
-        engine.state.epoch, avg_loss)
+    output_str = f'Evaluater Results - Epoch {engine.state.epoch} - Avg loss: {avg_loss:.2f}'
     for k in extra_monitor:
-        output_str += " Avg " + k + ": {:.2f}".format(metrics[k])
+        output_str += f' Avg {k}: {metrics[k]:.2f}'
     print(output_str)
 
 
@@ -245,9 +239,9 @@ def predict_samples(engine):
         tb_logger.writer.add_audio('mixture', x.t(), engine.state.epoch)
 
         X = spec(x.to(device))
-        input = X.abs()
+        X_mag = X.abs()
         with amp.autocast(enabled=amp_enabled):
-            pred_mask = model(input.unsqueeze(0)).squeeze()
+            pred_mask = model(X_mag.unsqueeze(0)).squeeze()
 
         xpred = spec(pred_mask * X, inverse=True).cpu().clip(-1, 1)
 
