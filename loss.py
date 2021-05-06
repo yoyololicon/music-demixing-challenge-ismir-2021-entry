@@ -13,7 +13,7 @@ class WaveGlowLoss(torch.nn.Module):
         z = z.reshape(-1)
         loss = 0.5 * z @ z / self.sigma2 - logdet.sum()
         loss = loss / z.numel()
-        return loss
+        return loss, {}
 
 
 class CLoss(torch.nn.Module):

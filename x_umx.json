@@ -16,7 +16,7 @@
             "args": {
                 "root": "~/Datasets/musdb18hq/",
                 "subsets": "train",
-                "split": null,
+                "split": "train",
                 "seq_duration": 6.0,
                 "samples_per_track": 64,
                 "random": true,
@@ -27,8 +27,8 @@
             "type": "FastMUSDB",
             "args": {
                 "root": "~/Datasets/musdb18hq/",
-                "subsets": "test",
-                "split": null,
+                "subsets": "train",
+                "split": "valid",
                 "seq_duration": 6.0
             }
         }
@@ -52,7 +52,7 @@
         "type": "ReduceLROnPlateau",
         "args": {
             "factor": 0.3,
-            "patience": 10,
+            "patience": 40,
             "verbose": true
         }
     },
@@ -77,10 +77,10 @@
         "save_dir": "saved/",
         "log_dir": "runs/",
         "cum_steps": 2,
-        "patience": 250,
+        "patience": 1000,
         "amp_enabled": false,
         "val_epoch_length": null,
-        "validate_every": 4,
+        "validate_every": 1,
         "targets": [
             "vocals",
             "drums",
