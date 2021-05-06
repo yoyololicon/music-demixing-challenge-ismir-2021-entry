@@ -79,10 +79,9 @@ class FastMUSDB(Dataset):
         for subset in subsets:
             subset_folder = os.path.join(self.root, subset)
             for _, folders, files in tqdm(os.walk(subset_folder)):
-
                 # parse pcm tracks and sort by name
                 for track_name in sorted(folders):
-                    if subsets == 'train':
+                    if subset == 'train':
                         if split == 'train' and track_name in self.setup['validation_tracks']:
                             continue
                         elif split == 'valid' and track_name not in self.setup['validation_tracks']:
