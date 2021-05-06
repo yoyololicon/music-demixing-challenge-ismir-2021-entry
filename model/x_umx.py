@@ -73,7 +73,7 @@ class X_UMX(nn.Module):
 
     def forward(self, spec: torch.Tensor):
         batch, channels, bins, frames = spec.shape
-        spec = spec[..., :self.max_bins, :].add(1e-8).log_()
+        spec = spec[..., :self.max_bins, :]
 
         x = (spec.unsqueeze(1) - self.input_means.view(4, 1, -1, 1))
 
