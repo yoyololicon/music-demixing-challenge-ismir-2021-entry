@@ -1,0 +1,20 @@
+name: demixing
+channels:
+  - defaults
+  - conda-forge
+  - pytorch
+  - nvidia
+
+create_default_packages:
+  - pip
+  - pytorch
+  - torchaudio
+  - cudatoolkit=11.1
+  - ignite
+  - tensorboard
+  - tensorboardX
+  - pysoundfile
+  - tqdm
+  - pip:
+    - torch-optimizer
+    - musdb
