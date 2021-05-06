@@ -205,8 +205,13 @@ tb_logger.attach_opt_params_handler(
     optimizer=optimizer,
 )
 
+# add model graph
+test_input = spec(torch.from_numpy(
+    val_data[0][0]).to(device)).abs().unsqueeze(0)
+tb_logger.writer.add_graph(model, input_to_model=test_input)
 
 # early stop
+
 
 def score_function(engine):
     return -engine.state.metrics['loss']
