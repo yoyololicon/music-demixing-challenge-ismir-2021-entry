@@ -8,6 +8,7 @@ import argparse
 import json
 from datetime import datetime
 import os
+from jsonschema import validate
 from ignite.engine import Engine, Events
 from ignite.metrics import RunningAverage, Average
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
@@ -19,7 +20,7 @@ import dataset as module_data
 import loss as module_loss
 import model as module_arch
 
-from utils import get_instance
+from utils import get_instance, CONFIG_SCHEMA
 
 
 parser = argparse.ArgumentParser(description='SS Trainer')
@@ -31,7 +32,7 @@ parser.add_argument('--checkpoint', type=str, default=None,
 args = parser.parse_args()
 
 config = json.load(open(args.config))
-
+validate(config, schema=CONFIG_SCHEMA)
 
 if torch.cuda.is_available():
     device = 'cuda'

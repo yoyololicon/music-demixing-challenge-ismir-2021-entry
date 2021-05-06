@@ -78,7 +78,7 @@ class FastMUSDB(Dataset):
         track_lengths = []
         for subset in subsets:
             subset_folder = os.path.join(self.root, subset)
-            for _, folders, files in tqdm(os.walk(subset_folder)):
+            for _, folders, _ in tqdm(os.walk(subset_folder)):
                 # parse pcm tracks and sort by name
                 for track_name in sorted(folders):
                     if subset == 'train':

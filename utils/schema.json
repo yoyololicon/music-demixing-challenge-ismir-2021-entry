@@ -1,0 +1,159 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "definitions": {
+        "instance": {
+            "type": "object",
+            "properties": {
+                "type": {
+                    "type": "string"
+                },
+                "args": {
+                    "type": "object"
+                }
+            },
+            "required": [
+                "type",
+                "args"
+            ]
+        }
+    },
+    "type": "object",
+    "properties": {
+        "name": {
+            "type": "string"
+        },
+        "arch": {
+            "$ref": "#/definitions/instance"
+        },
+        "dataset": {
+            "type": "object",
+            "properties": {
+                "train": {
+                    "$ref": "#/definitions/instance"
+                },
+                "valid": {
+                    "$ref": "#/definitions/instance"
+                }
+            },
+            "required": [
+                "train",
+                "valid"
+            ]
+        },
+        "optimizer": {
+            "$ref": "#/definitions/instance"
+        },
+        "loss": {
+            "$ref": "#/definitions/instance"
+        },
+        "lr_scheduler": {
+            "$ref": "#/definitions/instance"
+        },
+        "data_loader": {
+            "type": "object",
+            "properties": {
+                "train": {
+                    "type": "object",
+                    "properties": {
+                        "batch_size": {
+                            "type": "integer"
+                        },
+                        "shuffle": {
+                            "type": "boolean"
+                        }
+                    },
+                    "required": [
+                        "batch_size",
+                        "shuffle"
+                    ]
+                },
+                "valid": {
+                    "type": "object",
+                    "properties": {
+                        "batch_size": {
+                            "type": "integer"
+                        }
+                    },
+                    "required": [
+                        "batch_size"
+                    ]
+                }
+            },
+            "required": [
+                "train",
+                "valid"
+            ]
+        },
+        "trainer": {
+            "type": "object",
+            "properties": {
+                "epochs": {
+                    "type": "integer"
+                },
+                "save_dir": {
+                    "type": "string"
+                },
+                "log_dir": {
+                    "type": "string"
+                },
+                "cum_steps": {
+                    "type": "integer"
+                },
+                "patience": {
+                    "type": "integer"
+                },
+                "amp_enabled": {
+                    "type": "boolean"
+                },
+                "val_epoch_length": {
+                    "type": "null"
+                },
+                "validate_every": {
+                    "type": "integer"
+                },
+                "targets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "n_fft": {
+                    "type": "integer"
+                },
+                "hop_length": {
+                    "type": "integer"
+                },
+                "extra_monitor": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            },
+            "required": [
+                "epochs",
+                "save_dir",
+                "log_dir",
+                "cum_steps",
+                "patience",
+                "amp_enabled",
+                "val_epoch_length",
+                "validate_every",
+                "targets",
+                "n_fft",
+                "hop_length",
+                "extra_monitor"
+            ]
+        }
+    },
+    "required": [
+        "name",
+        "arch",
+        "dataset",
+        "optimizer",
+        "loss",
+        "lr_scheduler",
+        "data_loader",
+        "trainer"
+    ]
+}
