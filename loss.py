@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+from model import Spec
 from itertools import combinations, chain
 
 
@@ -12,7 +13,24 @@ class WaveGlowLoss(torch.nn.Module):
         z = z.reshape(-1)
         loss = 0.5 * z @ z / self.sigma2 - logdet.sum()
         loss = loss / z.numel()
-        return loss
+        return loss, {}
+
+
+class CLoss(torch.nn.Module):
+    def __init__(self, mcoeff=10, n_fft=4096, hop_length=1024):
+        super().__init__()
+        self.mcoeff = mcoeff
+        self.spec = Spec(n_fft, hop_length)
+
+    def forward(self, msk_hat, gt_spec, mix_spec, gt, mix):
+        pred = self.spec(msk_hat * mix_spec.unsqueeze(1), inverse=True)
+        loss_f = mse_loss(msk_hat, gt_spec, mix_spec)
+        loss_t = sdr_loss(pred, gt, mix)
+        loss = loss_f + self.mcoeff * loss_t
+        return loss, {
+            "loss_f": loss_f.item(),
+            "loss_t": loss_t.item()
+        }
 
 
 def bce_loss(msk_hat, gt_spec):

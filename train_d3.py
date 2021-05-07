@@ -18,8 +18,7 @@ from torch_optimizer import RAdam, Yogi
 from dataset import FastMUSDB
 from model import get_vocals_model, Spec
 
-parser = argparse.ArgumentParser(
-    description='D3Net Trainer')
+parser = argparse.ArgumentParser(description='D3Net Trainer')
 
 parser.add_argument('config', type=str, help='config file')
 parser.add_argument('--checkpoint', type=str, default=None)
@@ -193,7 +192,8 @@ tb_logger.attach_opt_params_handler(
 
 # add model graph
 
-tb_logger.writer.add_graph(model, input_to_model=torch.rand(1, 2, 2049, 256, device=device))
+tb_logger.writer.add_graph(
+    model, input_to_model=torch.rand(1, 2, 2049, 256, device=device))
 
 # early stop
 

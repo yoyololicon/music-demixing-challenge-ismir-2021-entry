@@ -9,3 +9,7 @@ def remove_weight_norms(m):
 def add_weight_norms(m):
     if hasattr(m, 'weight'):
         nn.utils.weight_norm(m)
+
+
+def get_instance(module, config, *args):
+    return getattr(module, config['type'])(*args, **config['args'])

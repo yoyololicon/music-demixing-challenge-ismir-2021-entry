@@ -32,7 +32,7 @@ class FastMUSDB(Dataset):
                  random=False,
                  random_track_mix=False,
                  ):
-        self.root = root
+        self.root = os.path.expanduser(root)
         self.seq_duration = seq_duration
         self.subsets = subsets
         self.sr = 44100
@@ -78,11 +78,10 @@ class FastMUSDB(Dataset):
         track_lengths = []
         for subset in subsets:
             subset_folder = os.path.join(self.root, subset)
-            for _, folders, files in tqdm(os.walk(subset_folder)):
-
+            for _, folders, _ in tqdm(os.walk(subset_folder)):
                 # parse pcm tracks and sort by name
                 for track_name in sorted(folders):
-                    if subsets == 'train':
+                    if subset == 'train':
                         if split == 'train' and track_name in self.setup['validation_tracks']:
                             continue
                         elif split == 'valid' and track_name not in self.setup['validation_tracks']:
