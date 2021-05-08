@@ -61,6 +61,7 @@ try:
 except AttributeError:
     criterion = get_instance(nn, config['loss']).to(device)
 
+sdr = module_loss.SDR()
 
 print('Trainable parameters: {}'.format(sum(p.numel()
                                             for p in model.parameters() if p.requires_grad)))
@@ -133,9 +134,21 @@ def evaluate_function(engine, batch):
             pred_mask = model(X_mag)
 
         loss, extra_losses = criterion(pred_mask, Y, X, y, x)
-
         result = {'loss': loss.item()}
         result.update(extra_losses)
+
+        xpred = spec(pred_mask * (X if X.ndim ==
+                                  pred_mask.ndim else X.unsqueeze(1)), inverse=True)
+        if xpred.ndim > 3:
+            xpred = xpred.transpose(0, 1)
+            y = y.transpose(0, 1)
+        else:
+            xpred = xpred.unsqueeze(0)
+            y = y.unsqueeze(0)
+        sdrs = sdr(xpred, y)
+        for i, t in enumerate(targets_idx):
+            result[f'{val_data.sources[t]}_sdr'] = sdrs[i].item()
+        result['avg_sdr'] = sdrs.mean().item()
         return result
 
 
@@ -147,6 +160,10 @@ Average(output_transform=lambda x: x['loss']).attach(evaluator, 'loss')
 for k in extra_monitor:
     RunningAverage(output_transform=lambda x, m=k: x[m]).attach(trainer, k)
     Average(output_transform=lambda x, m=k: x[m]).attach(evaluator, k)
+for t in targets_idx:
+    k = f'{val_data.sources[t]}_sdr'
+    Average(output_transform=lambda x, m=k: x[m]).attach(evaluator, k)
+Average(output_transform=lambda x: x['avg_sdr']).attach(evaluator, 'avg_sdr')
 
 
 @trainer.on(Events.EPOCH_COMPLETED)
@@ -162,11 +179,15 @@ def print_logs(engine, dataloader):
     evaluator.run(dataloader, max_epochs=1, epoch_length=val_epoch_length)
     metrics = evaluator.state.metrics
     avg_loss = metrics['loss']
+    avg_sdr = metrics['avg_sdr']
     scheduler.step(avg_loss)
 
     output_str = f'Evaluater Results - Epoch {engine.state.epoch} - Avg loss: {avg_loss:.2f}'
     for k in extra_monitor:
         output_str += f' Avg {k}: {metrics[k]:.2f}'
+
+    output_str += f' Avg SDR: {avg_sdr:.2f}'
+
     print(output_str)
 
 
