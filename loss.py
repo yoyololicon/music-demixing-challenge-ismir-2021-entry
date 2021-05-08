@@ -55,6 +55,37 @@ class CLoss(torch.nn.Module):
         }
 
 
+class MDLoss(torch.nn.Module):
+    def __init__(self, mcoeff=10, n_fft=4096, hop_length=1024):
+        super().__init__()
+        self.mcoeff = mcoeff
+        self.spec = Spec(n_fft, hop_length)
+
+    def forward(self, msk_hat, gt_spec, mix_spec, gt, mix):
+        pred_spec = msk_hat * mix_spec
+        diff = pred_spec - gt_spec
+
+        real = diff.real.reshape(-1)
+        imag = diff.imag.reshape(-1)
+        mse = real @ real + imag @ imag
+        loss_f = mse / real.numel()
+
+        pred = self.spec(pred_spec, inverse=True)
+        batch_size, n_channels, length = pred.shape
+
+        # Fix Length
+        mix = mix[..., :length].reshape(-1, length)
+        gt = gt[..., :length].reshape(-1, length)
+        pred = pred.view(-1, length)
+
+        loss_t = _sdr_loss_core(pred, gt, mix) + 1.0
+        loss = loss_f + self.mcoeff * loss_t
+        return loss, {
+            "loss_f": loss_f.item(),
+            "loss_t": loss_t.item()
+        }
+
+
 def bce_loss(msk_hat, gt_spec):
     assert msk_hat.shape == gt_spec.shape
     loss = []
