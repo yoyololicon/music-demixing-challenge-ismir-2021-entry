@@ -4,6 +4,28 @@ from model import Spec
 from itertools import combinations, chain
 
 
+class SDR(torch.nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.expr = 'bi,bi->b'
+
+    def _batch_dot(self, x, y):
+        return torch.einsum(self.expr, x, y)
+
+    def forward(self, estimates, references):
+        length = min(references.shape[-1], estimates.shape[-1])
+        references = references[..., :length].reshape(references.shape[0], -1)
+        estimates = estimates[..., :length].reshape(estimates.shape[0], -1)
+
+        delta = 1e-7  # avoid numerical errors
+        num = self._batch_dot(references, references)
+        den = num + self._batch_dot(estimates, estimates) - \
+            2 * self._batch_dot(estimates, references)
+        den = den.relu().add_(delta).log10()
+        num = num.add_(delta).log10()
+        return 10 * (num - den)
+
+
 class WaveGlowLoss(torch.nn.Module):
     def __init__(self, sigma=1.):
         super().__init__()
