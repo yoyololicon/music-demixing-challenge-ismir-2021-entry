@@ -55,11 +55,8 @@ except AttributeError:
         torch_optimizer, config['optimizer'], model.parameters())
 
 scheduler = get_instance(optim.lr_scheduler, config['lr_scheduler'], optimizer)
+criterion = get_instance(module_loss, config['loss']).to(device)
 
-try:
-    criterion = get_instance(module_loss, config['loss']).to(device)
-except AttributeError:
-    criterion = get_instance(nn, config['loss']).to(device)
 
 sdr = module_loss.SDR()
 
