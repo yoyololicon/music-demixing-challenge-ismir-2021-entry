@@ -1,7 +1,7 @@
 {
-    "name": "UNet (Vocals)",
+    "name": "UNet (All)",
     "arch": {
-        "type": "UNet",
+        "type": "MultiUNet",
         "args": {}
     },
     "dataset": {
@@ -11,7 +11,7 @@
                 "root": "~/Datasets/musdb18hq/",
                 "subsets": "train",
                 "split": "train",
-                "seq_duration": 12.0,
+                "seq_duration": 11.88,
                 "samples_per_track": 64,
                 "random": true,
                 "random_track_mix": true
@@ -23,7 +23,7 @@
                 "root": "~/Datasets/musdb18hq/",
                 "subsets": "train",
                 "split": "valid",
-                "seq_duration": 12.0
+                "seq_duration": 11.88
             }
         }
     },
@@ -34,12 +34,8 @@
         }
     },
     "loss": {
-        "type": "MDLoss",
-        "args": {
-            "mcoeff": 10,
-            "n_fft": 4096,
-            "hop_length": 1024
-        }
+        "type": "L1Loss",
+        "args": {}
     },
     "lr_scheduler": {
         "type": "ReduceLROnPlateau",
@@ -51,15 +47,17 @@
     },
     "data_loader": {
         "train": {
-            "batch_size": 4,
+            "batch_size": 2,
             "shuffle": true,
             "drop_last": true,
-            "num_workers": 4,
+            "num_workers": 2,
+            "prefetch_factor": 4,
             "pin_memory": true
         },
         "valid": {
-            "batch_size": 4,
-            "num_workers": 4,
+            "batch_size": 2,
+            "num_workers": 2,
+            "prefetch_factor": 4,
             "pin_memory": true
         }
     },
@@ -73,13 +71,13 @@
         "val_epoch_length": null,
         "validate_every": 1,
         "targets": [
-            "vocals"
+            "vocals",
+            "drums",
+            "bass",
+            "other"
         ],
         "n_fft": 4096,
         "hop_length": 1024,
-        "extra_monitor": [
-            "loss_f",
-            "loss_t"
-        ]
+        "extra_monitor": []
     }
 }

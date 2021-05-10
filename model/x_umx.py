@@ -89,8 +89,8 @@ class X_UMX(nn.Module):
         avg = (bass + drums + vocals + others) * 0.25
         cross_2 = torch.cat([cross_1, avg], 2).permute(1, 2, 0)
 
-        mask = F.softmax(self.affine2(cross_2).view(
-            batch, 4, channels, bins, frames), 1)
+        mask = F.relu(self.affine2(cross_2).view(
+            batch, 4, channels, bins, frames), True)
         return mask
 
 

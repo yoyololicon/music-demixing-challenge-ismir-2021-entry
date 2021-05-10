@@ -55,6 +55,15 @@ class CLoss(torch.nn.Module):
         }
 
 
+class L1Loss(torch.nn.L1Loss):
+    def forward(self, msk_hat, gt_spec, mix_spec, gt, mix):
+        if msk_hat.ndim != mix_spec.ndim:
+            pred = msk_hat * mix_spec.abs().unsqueeze(1)
+        else:
+            pred = msk_hat * mix_spec.abs()
+        return super().forward(pred, gt_spec.abs()), {}
+
+
 class MDLoss(torch.nn.Module):
     def __init__(self, mcoeff=10, n_fft=4096, hop_length=1024):
         super().__init__()
@@ -105,18 +114,18 @@ def bce_loss(msk_hat, gt_spec):
 def mse_loss(msk_hat, gt_spec, mix_spec):
 
     assert msk_hat.shape == gt_spec.shape
-    #mix_spec_mag = mix_spec.abs()
-    #gt_spec_mag = gt_spec.abs()
+    mix_spec_mag = mix_spec.abs()
+    gt_spec_mag = gt_spec.abs()
     loss = []
     for c in chain(combinations(range(4), 1), combinations(range(4), 2), combinations(range(4), 3)):
         m = sum([msk_hat[:, i] for i in c])
-        gt = sum([gt_spec[:, i] for i in c])
-        diff = m * mix_spec - gt
-        real = diff.real.reshape(-1)
-        imag = diff.imag.reshape(-1)
-        mse = real @ real + imag @ imag
-        loss.append(mse / real.numel())
-        #loss.append(F.mse_loss(m * mix_spec_mag, gt))
+        gt = sum([gt_spec_mag[:, i] for i in c])
+        #diff = m * mix_spec - gt
+        #real = diff.real.reshape(-1)
+        #imag = diff.imag.reshape(-1)
+        #mse = real @ real + imag @ imag
+        #loss.append(mse / real.numel())
+        loss.append(F.mse_loss(m * mix_spec_mag, gt))
 
     # All 14 Combination Losses (4C1 + 4C2 + 4C3)
     loss_mse = sum(loss) / len(loss)
