@@ -11,8 +11,9 @@ args = parser.parse_args()
 
 orig = XUMX.from_pretrained(args.infile)
 our = X_UMX(max_bins=1487)
+
 with torch.no_grad():
-    for i, src in enumerate(orig.sources):
+    for i, src in enumerate(['drums', 'bass', 'other', 'vocals']):
         our.input_means[i*our.max_bins:(i+1) *
                         our.max_bins] = orig.mean_scale["input_mean_{}".format(src)]
         our.input_scale[i*our.max_bins:(

@@ -28,6 +28,8 @@ parser = argparse.ArgumentParser(description='SS Trainer')
 parser.add_argument('config', type=str, help='config file')
 parser.add_argument('--checkpoint', type=str, default=None,
                     help='training checkpoint')
+parser.add_argument('--weights', type=str, default=None,
+                    help='initial model weights')
 
 args = parser.parse_args()
 
@@ -56,10 +58,7 @@ except AttributeError:
 
 scheduler = get_instance(optim.lr_scheduler, config['lr_scheduler'], optimizer)
 
-try:
-    criterion = get_instance(module_loss, config['loss']).to(device)
-except AttributeError:
-    criterion = get_instance(nn, config['loss']).to(device)
+criterion = get_instance(module_loss, config['loss']).to(device)
 
 sdr = module_loss.SDR()
 
@@ -289,9 +288,10 @@ if args.checkpoint:
     checkpoint = torch.load(args.checkpoint)
     Checkpoint.load_objects(to_load=to_save, checkpoint=checkpoint)
 
+if args.weights:
+    model.load_state_dict(torch.load(args.weights, map_location=device))
 
 trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
-
 
 e = trainer.run(train_loader, max_epochs=epochs)
 
