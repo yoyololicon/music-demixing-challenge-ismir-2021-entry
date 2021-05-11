@@ -65,14 +65,18 @@ class WaveGlowLoss(torch.nn.Module):
 
 
 class CLoss(_Loss):
-    def __init__(self, mcoeff=10, n_fft=4096, hop_length=1024):
+    def __init__(self, mcoeff=10, n_fft=4096, hop_length=1024, complex_mse=True):
         super().__init__()
         self.mcoeff = mcoeff
         self.spec = Spec(n_fft, hop_length)
+        self.complex_mse = complex_mse
 
     def _core_loss(self, msk_hat, gt_spec, mix_spec, gt, mix):
         pred = self.spec(msk_hat * mix_spec.unsqueeze(1), inverse=True)
-        loss_f = mse_loss(msk_hat, gt_spec, mix_spec)
+        if self.complex_mse:
+            loss_f = complex_mse_loss(msk_hat, gt_spec, mix_spec)
+        else:
+            loss_f = real_mse_loss(msk_hat, gt_spec.abs(), mix_spec.abs())
         loss_t = sdr_loss(pred, gt, mix)
         loss = loss_f + self.mcoeff * loss_t
         return loss, {
@@ -97,11 +101,11 @@ def bce_loss(msk_hat, gt_spec):
     return loss_mse
 
 
-def mse_loss(msk_hat, gt_spec, mix_spec):
-
+def complex_mse_loss(msk_hat: torch.Tensor, gt_spec: torch.Tensor, mix_spec: torch.Tensor):
     assert msk_hat.shape == gt_spec.shape
-    #mix_spec_mag = mix_spec.abs()
-    #gt_spec_mag = gt_spec.abs()
+    assert msk_hat.is_floating_point()
+    assert gt_spec.is_complex() and mix_spec.is_complex()
+
     loss = []
     for c in chain(combinations(range(4), 1), combinations(range(4), 2), combinations(range(4), 3)):
         m = sum([msk_hat[:, i] for i in c])
@@ -111,7 +115,23 @@ def mse_loss(msk_hat, gt_spec, mix_spec):
         imag = diff.imag.reshape(-1)
         mse = real @ real + imag @ imag
         loss.append(mse / real.numel())
-        #loss.append(F.mse_loss(m * mix_spec_mag, gt))
+
+    # All 14 Combination Losses (4C1 + 4C2 + 4C3)
+    loss_mse = sum(loss) / len(loss)
+    return loss_mse
+
+
+def real_mse_loss(msk_hat: torch.Tensor, gt_spec: torch.Tensor, mix_spec: torch.Tensor):
+    assert msk_hat.shape == gt_spec.shape
+    assert msk_hat.is_floating_point() and gt_spec.is_floating_point(
+    ) and mix_spec.is_floating_point()
+    assert not gt_spec.is_complex() and not mix_spec.is_complex()
+
+    loss = []
+    for c in chain(combinations(range(4), 1), combinations(range(4), 2), combinations(range(4), 3)):
+        m = sum([msk_hat[:, i] for i in c])
+        gt = sum([gt_spec[:, i] for i in c])
+        loss.append(F.mse_loss(m * mix_spec, gt))
 
     # All 14 Combination Losses (4C1 + 4C2 + 4C3)
     loss_mse = sum(loss) / len(loss)
