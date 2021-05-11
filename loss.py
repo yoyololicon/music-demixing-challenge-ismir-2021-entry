@@ -4,6 +4,32 @@ from model import Spec
 from itertools import combinations, chain
 
 
+class _Loss(torch.nn.Module):
+    r"""Base class for all loss modules.
+
+    You can't use this module directly.
+    Your loss should also subclass this class.
+
+    Args:
+        msk_hat (Tensor): mask tensor with size (batch, *, channels, bins, frames), `*` is an optional multi targets dimension.
+                        The tensor value should always be non-negative
+        gt_spec (Tensor): target spectrogram complex tensor with size (batch, *, channels, bins, frames), `*` is an optional multi targets dimension.
+        mix_spec (Tensor): mixture spectrogram complex tensor with size (batch, channels, bins, frames)
+        gt (Tensor): target time signal tensor with size (batch, *, channels, samples), `*` is an optional multi targets dimension.
+        mix (Tensor): mixture time signal tensor with size (batch, channels, samples)
+
+    Returns:
+        tuple: a length-2 tuple with the first element is the final loss tensor, 
+            and the second is a dict containing any intermediate loss value you want to monitor
+    """
+
+    def forward(self, *args, **kwargs):
+        return self._core_loss(*args, **kwargs)
+
+    def _core_loss(self, msk_hat, gt_spec, mix_spec, gt, mix):
+        raise NotImplementedError
+
+
 class SDR(torch.nn.Module):
     def __init__(self) -> None:
         super().__init__()
@@ -38,13 +64,13 @@ class WaveGlowLoss(torch.nn.Module):
         return loss, {}
 
 
-class CLoss(torch.nn.Module):
+class CLoss(_Loss):
     def __init__(self, mcoeff=10, n_fft=4096, hop_length=1024):
         super().__init__()
         self.mcoeff = mcoeff
         self.spec = Spec(n_fft, hop_length)
 
-    def forward(self, msk_hat, gt_spec, mix_spec, gt, mix):
+    def _core_loss(self, msk_hat, gt_spec, mix_spec, gt, mix):
         pred = self.spec(msk_hat * mix_spec.unsqueeze(1), inverse=True)
         loss_f = mse_loss(msk_hat, gt_spec, mix_spec)
         loss_t = sdr_loss(pred, gt, mix)
