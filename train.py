@@ -104,11 +104,32 @@ class speed_perturb(torch.nn.Module):
             self.resamplers.append(
                     torchaudio.transforms.Resample(self.orig_freq, new_freq))
 
-    def forward(self, audio, samp_index):
-        # Perform a random perturbation
-        perturbed_waveform = self.resamplers[samp_index](audio)
+    def forward(self, targets):
+        # Perform source-wise random perturbation
+        new_targets = []
+        for i in range(targets.shape[1]):
+            samp_index = torch.randint(len(self.speeds), (1,))[0]
+            perturbed_target = self.resamplers[samp_index](targets[:, i].contiguous())
+            new_targets.append(perturbed_target)
+            if i == 0:
+                min_len = perturbed_target.shape[-1]
+            else:
+                if perturbed_target.shape[-1] < min_len:
+                    min_len = perturbed_target.shape[-1]
 
-        return perturbed_waveform
+        perturbed_targets = torch.zeros(
+            targets.shape[0],
+            targets.shape[1],
+            2,
+            min_len,
+            device=targets.device,
+            dtype=torch.float,
+            )
+
+        for i, _ in enumerate(new_targets):
+            perturbed_targets[:, i] = new_targets[i][:, :, 0:min_len]
+
+        return perturbed_targets
 
 
 scaler = amp.GradScaler(enabled=amp_enabled)
@@ -123,9 +144,8 @@ def process_function(engine, batch):
     x, y = x.to(device), y.to(device)
 
     if config["trainer"]["speed_perturb"]:
-        samp_index = torch.randint(len(resampler.speeds), (1,))[0]
-        x = resampler(x, samp_index)
-        y = resampler(y, samp_index)
+        y = resampler(y)
+        x = y.sum(1)
 
     X = spec(x)
     Y = spec(y)
