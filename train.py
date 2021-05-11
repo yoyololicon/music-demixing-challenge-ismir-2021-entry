@@ -1,6 +1,7 @@
 from collections import namedtuple
 import random
 import torch
+import torchaudio
 from torch.utils.data import DataLoader
 from torch import optim, nn
 from torch.cuda import amp
@@ -40,6 +41,7 @@ if torch.cuda.is_available():
 else:
     device = 'cpu'
 
+print(config['dataset']['train'])
 train_data = get_instance(module_data, config['dataset']['train'])
 val_data = get_instance(module_data, config['dataset']['valid'])
 
@@ -88,10 +90,30 @@ for t in targets:
 assert len(targets_idx) > 0
 targets_idx = sorted(targets_idx)
 
+class speed_perturb(torch.nn.Module):
+    def __init__(
+        self, orig_freq, speeds=[90, 100, 110]
+    ):
+        super().__init__()
+        self.orig_freq = orig_freq
+        self.speeds = speeds
+        self.resamplers = []
+        self.speeds = [90, 100, 110]
+        for s in self.speeds:
+            new_freq = self.orig_freq * s // 100
+            self.resamplers.append(
+                    torchaudio.transforms.Resample(self.orig_freq, new_freq))
+
+    def forward(self, audio, samp_index):
+        # Perform a random perturbation
+        perturbed_waveform = self.resamplers[samp_index](audio)
+
+        return perturbed_waveform
+
 
 scaler = amp.GradScaler(enabled=amp_enabled)
 spec = module_arch.Spec(n_fft, hop_length).to(device)
-
+resampler = speed_perturb(orig_freq=44100)
 
 def process_function(engine, batch):
     model.train()
@@ -99,6 +121,11 @@ def process_function(engine, batch):
     x, y = batch
     y = y[:, targets_idx].squeeze(1)
     x, y = x.to(device), y.to(device)
+
+    if config["trainer"]["speed_perturb"]:
+        samp_index = torch.randint(len(resampler.speeds), (1,))[0]
+        x = resampler(x, samp_index)
+        y = resampler(y, samp_index)
 
     X = spec(x)
     Y = spec(y)
