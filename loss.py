@@ -202,4 +202,4 @@ if __name__ == "__main__":
 
     mix, pred, gt = torch.rand(2, 2, 2049, 100), torch.rand(
         4, 2, 2, 2049, 100, requires_grad=True), torch.rand(4, 2, 2, 2049, 100)
-    print(mse_loss(mix, pred, gt))
+    print(real_mse_loss(mix, pred, gt))

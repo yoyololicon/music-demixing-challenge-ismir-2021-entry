@@ -18,3 +18,4 @@ create_default_packages:
   - pip:
     - torch-optimizer
     - musdb
+    - git+https://github.com/yoyololicon/norbert@batch-support
