@@ -27,7 +27,7 @@ class MWF(torch.nn.Module):
                 V, X, self.alpha if self.softmask else 1)
 
         Y = norbert.wiener(V, X.to(torch.complex128),
-                           self.n_iter, use_softmask=self.softmask)
+                           self.n_iter, use_softmask=self.softmask).to(X.dtype)
         
         Y = Y.permute(0, 4, 3, 2, 1).contiguous()
         return Y
