@@ -61,7 +61,8 @@ scheduler = get_instance(optim.lr_scheduler, config['lr_scheduler'], optimizer)
 criterion = get_instance(module_loss, config['loss']).to(device)
 
 sdr = module_loss.SDR()
-mwf = MWF()
+mwf_kwargs = config.get('MWF', {})
+mwf = MWF(**mwf_kwargs)
 
 print('Trainable parameters: {}'.format(sum(p.numel()
                                             for p in model.parameters() if p.requires_grad)))
