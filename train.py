@@ -138,16 +138,13 @@ def evaluate_function(engine, batch):
         result = {'loss': loss.item()}
         result.update(extra_losses)
 
-        Y = mwf(pred_mask, X)
+        xpred = spec(pred_mask * (X if X.ndim ==
+                                  pred_mask.ndim else X.unsqueeze(1)), inverse=True)
 
-        xpred = spec(Y, inverse=True)
-        if xpred.ndim > 3:
-            xpred = xpred.transpose(0, 1)
-            y = y.transpose(0, 1)
-        else:
-            xpred = xpred.unsqueeze(0)
-            y = y.unsqueeze(0)
-        sdrs = sdr(xpred, y)
+        batch = xpred.shape[0]
+        sdrs = sdr(
+            xpred.view(-1, *xpred.shape[-2:]), y.view(-1, *y.shape[-2:])).view(batch, -1).mean(0)
+
         for i, t in enumerate(targets_idx):
             result[f'{val_data.sources[t]}_sdr'] = sdrs[i].item()
         result['avg_sdr'] = sdrs.mean().item()
