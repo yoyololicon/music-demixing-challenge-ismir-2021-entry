@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from model import Spec
 from itertools import combinations, chain
-from .utils import MWF
+from utils import MWF
 
 
 class _Loss(torch.nn.Module):
@@ -71,11 +71,11 @@ class CLoss(_Loss):
         self.mcoeff = mcoeff
         self.spec = Spec(n_fft, hop_length)
         self.complex_mse = complex_mse
-        self.mwf_enable = mwf_kwargs.get('n_iter', default=0) > 1
-        self.mwf = MWF(**mwf_kwargs)
+        if len(mwf_kwargs):
+            self.mwf = MWF(**mwf_kwargs)
 
     def _core_loss(self, msk_hat, gt_spec, mix_spec, gt, mix):
-        if self.mwf_enable:
+        if hasattr(self, 'mwf'):
             Y = self.mwf(msk_hat, mix_spec)
         else:
             Y = msk_hat * mix_spec.unsqueeze(1)
