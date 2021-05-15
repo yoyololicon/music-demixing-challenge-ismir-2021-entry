@@ -138,8 +138,8 @@ def evaluate_function(engine, batch):
         result = {'loss': loss.item()}
         result.update(extra_losses)
 
-        xpred = spec(pred_mask * (X if X.ndim ==
-                                  pred_mask.ndim else X.unsqueeze(1)), inverse=True)
+        Y = mwf(pred_mask, X)
+        xpred = spec(Y, inverse=True)
 
         batch = xpred.shape[0]
         sdrs = sdr(
