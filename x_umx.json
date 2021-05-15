@@ -14,7 +14,7 @@
         "train": {
             "type": "FastMUSDB",
             "args": {
-                "root": "~/Datasets/musdb18hq/",
+                "root": "./Datasets/musdb18hq/",
                 "subsets": "train",
                 "split": "train",
                 "seq_duration": 6.0,
@@ -26,7 +26,7 @@
         "valid": {
             "type": "FastMUSDB",
             "args": {
-                "root": "~/Datasets/musdb18hq/",
+                "root": "./Datasets/musdb18hq/",
                 "subsets": "train",
                 "split": "valid",
                 "seq_duration": 6.0
@@ -79,6 +79,7 @@
         "cum_steps": 2,
         "patience": 1000,
         "amp_enabled": false,
+	"augmentation": true,
         "val_epoch_length": null,
         "validate_every": 1,
         "targets": [
