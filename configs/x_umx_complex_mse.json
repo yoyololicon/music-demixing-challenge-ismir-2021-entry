@@ -45,8 +45,7 @@
         "args": {
             "mcoeff": 10,
             "n_fft": 4096,
-            "hop_length": 1024,
-            "n_iter": 1
+            "hop_length": 1024
         }
     },
     "lr_scheduler": {
