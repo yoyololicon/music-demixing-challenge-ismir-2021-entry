@@ -11,6 +11,12 @@ class RandomSwapLR(object):
         self.p = p
 
     def __call__(self, stems: np.ndarray):
+        """
+        Args:
+            stems (np.array): (B, Num_channels, L)
+        Return:
+            stems (np.array): (B, Num_channels, L)
+        """
         tmp = np.flip(stems, 1)
         for i in range(stems.shape[0]):
             if random.random() < self.p:
@@ -25,6 +31,12 @@ class RandomGain(object):
         self.high = high
 
     def __call__(self, stems):
+        """
+        Args:
+            stems (np.array): (B, Num_channels, L)
+        Return:
+            stems (np.array): (B, Num_channels, L)
+        """
         gains = np.random.uniform(self.low, self.high, stems.shape[0])
         stems = stems * gains[:, None, None]
         return stems
@@ -43,35 +55,35 @@ class SpeedPerturb(torch.nn.Module):
             self.resamplers.append(
                     torchaudio.transforms.Resample(self.orig_freq, new_freq))
 
-    def forward(self, audios):
+    def forward(self, stems):
         """
         Args:
-            audios (torch.Tensor): (B, Num_sources, Num_channels, L)
+            stems (torch.Tensor): (B, Num_sources, Num_channels, L)
         Return:
-            perturbed_audios (torch.Tensor): (B, Num_sources, Num_channels, L')
+            perturbed_stems (torch.Tensor): (B, Num_sources, Num_channels, L')
         """
         # Perform source-wise random perturbation
-        new_audios = []
-        for i in range(audios.shape[1]):
+        new_stems = []
+        for i in range(stems.shape[1]):
             samp_index = torch.randint(len(self.speeds), (1,))[0]
-            perturbed_audio = self.resamplers[samp_index](audios[:, i].contiguous())
-            new_audios.append(perturbed_audio)
+            perturbed_audio = self.resamplers[samp_index](stems[:, i].contiguous())
+            new_stems.append(perturbed_audio)
             if i == 0:
                 min_len = perturbed_audio.shape[-1]
             else:
                 if perturbed_audio.shape[-1] < min_len:
                     min_len = perturbed_audio.shape[-1]
 
-        perturbed_audios = torch.zeros(
-            audios.shape[0],
-            audios.shape[1],
+        perturbed_stems = torch.zeros(
+            stems.shape[0],
+            stems.shape[1],
             2,
             min_len,
-            device=audios.device,
+            device=stems.device,
             dtype=torch.float,
             )
 
-        for i, _ in enumerate(new_audios):
-            perturbed_audios[:, i] = new_audios[i][:, :, 0:min_len]
+        for i, _ in enumerate(new_stems):
+            perturbed_stems[:, i] = new_stems[i][:, :, 0:min_len]
 
-        return perturbed_audios
+        return perturbed_stems
