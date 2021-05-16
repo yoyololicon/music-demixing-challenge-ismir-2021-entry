@@ -13,9 +13,9 @@ class RandomSwapLR(object):
     def __call__(self, stems: np.ndarray):
         """
         Args:
-            stems (np.array): (B, Num_channels, L)
+            stems (np.array): (Num_sources, Num_channels, L)
         Return:
-            stems (np.array): (B, Num_channels, L)
+            stems (np.array): (Num_sources, Num_channels, L)
         """
         tmp = np.flip(stems, 1)
         for i in range(stems.shape[0]):
@@ -33,9 +33,9 @@ class RandomGain(object):
     def __call__(self, stems):
         """
         Args:
-            stems (np.array): (B, Num_channels, L)
+            stems (np.array): (Num_sources, Num_channels, L)
         Return:
-            stems (np.array): (B, Num_channels, L)
+            stems (np.array): (Num_sources, Num_channels, L)
         """
         gains = np.random.uniform(self.low, self.high, stems.shape[0])
         stems = stems * gains[:, None, None]
