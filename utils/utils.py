@@ -11,5 +11,5 @@ def add_weight_norms(m):
         nn.utils.weight_norm(m)
 
 
-def get_instance(module, config, *args):
-    return getattr(module, config['type'])(*args, **config['args'])
+def get_instance(module, config, *args, **kwargs):
+    return getattr(module, config['type'])(*args, **config['args'], **kwargs)

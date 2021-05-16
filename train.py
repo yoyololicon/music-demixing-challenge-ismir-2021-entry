@@ -1,9 +1,9 @@
-from collections import namedtuple
 import random
 import torch
 from torch.utils.data import DataLoader
 from torch import optim, nn
 from torch.cuda import amp
+from torchvision.transforms import Compose
 import argparse
 import json
 from datetime import datetime
@@ -19,6 +19,7 @@ import torch_optimizer
 import dataset as module_data
 import loss as module_loss
 import model as module_arch
+import transform as module_transform
 
 from utils import get_instance, CONFIG_SCHEMA, MWF
 
@@ -42,7 +43,17 @@ if torch.cuda.is_available():
 else:
     device = 'cpu'
 
-train_data = get_instance(module_data, config['dataset']['train'])
+# define data augmentation transformss
+cpu_trsfm = Compose([
+    module_transform.RandomGain(),
+    module_transform.RandomSwapLR()
+])
+
+# your device transforms needs to handle with batches
+device_trsfm = nn.Sequential().to(device)
+
+train_data = get_instance(
+    module_data, config['dataset']['train'], transform=cpu_trsfm)
 val_data = get_instance(module_data, config['dataset']['valid'])
 
 train_loader = DataLoader(train_data, **config['data_loader']['train'])
@@ -98,8 +109,11 @@ def process_function(engine, batch):
     model.train()
 
     x, y = batch
-    y = y[:, targets_idx].squeeze(1)
     x, y = x.to(device), y.to(device)
+    if len(device_trsfm):
+        y = device_trsfm(y)
+        x = y.sum(1)
+    y = y[:, targets_idx].squeeze(1)
 
     X = spec(x)
     Y = spec(y)
