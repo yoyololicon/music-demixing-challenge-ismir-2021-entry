@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from model import Spec
 from itertools import combinations, chain
+from utils import MWF
 
 
 class _Loss(torch.nn.Module):
@@ -65,16 +66,22 @@ class WaveGlowLoss(torch.nn.Module):
 
 
 class CLoss(_Loss):
-    def __init__(self, mcoeff=10, n_fft=4096, hop_length=1024, complex_mse=True):
+    def __init__(self, mcoeff=10, n_fft=4096, hop_length=1024, complex_mse=True, **mwf_kwargs):
         super().__init__()
         self.mcoeff = mcoeff
         self.spec = Spec(n_fft, hop_length)
         self.complex_mse = complex_mse
+        if len(mwf_kwargs):
+            self.mwf = MWF(**mwf_kwargs)
 
     def _core_loss(self, msk_hat, gt_spec, mix_spec, gt, mix):
-        pred = self.spec(msk_hat * mix_spec.unsqueeze(1), inverse=True)
+        if hasattr(self, 'mwf'):
+            Y = self.mwf(msk_hat, mix_spec)
+        else:
+            Y = msk_hat * mix_spec.unsqueeze(1)
+        pred = self.spec(Y, inverse=True)
         if self.complex_mse:
-            loss_f = complex_mse_loss(msk_hat, gt_spec, mix_spec)
+            loss_f = complex_mse_loss(Y, gt_spec)
         else:
             loss_f = real_mse_loss(msk_hat, gt_spec.abs(), mix_spec.abs())
         loss_t = sdr_loss(pred, gt, mix)
@@ -101,16 +108,15 @@ def bce_loss(msk_hat, gt_spec):
     return loss_mse
 
 
-def complex_mse_loss(msk_hat: torch.Tensor, gt_spec: torch.Tensor, mix_spec: torch.Tensor):
-    assert msk_hat.shape == gt_spec.shape
-    assert msk_hat.is_floating_point()
-    assert gt_spec.is_complex() and mix_spec.is_complex()
+def complex_mse_loss(y_hat: torch.Tensor, gt_spec: torch.Tensor):
+    assert y_hat.shape == gt_spec.shape
+    assert gt_spec.is_complex() and y_hat.is_complex()
 
     loss = []
     for c in chain(combinations(range(4), 1), combinations(range(4), 2), combinations(range(4), 3)):
-        m = sum([msk_hat[:, i] for i in c])
+        m = sum([y_hat[:, i] for i in c])
         gt = sum([gt_spec[:, i] for i in c])
-        diff = m * mix_spec - gt
+        diff = m - gt
         real = diff.real.reshape(-1)
         imag = diff.imag.reshape(-1)
         mse = real @ real + imag @ imag

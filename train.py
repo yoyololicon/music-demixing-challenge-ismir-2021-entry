@@ -20,7 +20,7 @@ import dataset as module_data
 import loss as module_loss
 import model as module_arch
 
-from utils import get_instance, CONFIG_SCHEMA
+from utils import get_instance, CONFIG_SCHEMA, MWF
 
 
 parser = argparse.ArgumentParser(description='SS Trainer')
@@ -61,6 +61,8 @@ scheduler = get_instance(optim.lr_scheduler, config['lr_scheduler'], optimizer)
 criterion = get_instance(module_loss, config['loss']).to(device)
 
 sdr = module_loss.SDR()
+mwf_kwargs = config.get('MWF', {})
+mwf = MWF(**mwf_kwargs)
 
 print('Trainable parameters: {}'.format(sum(p.numel()
                                             for p in model.parameters() if p.requires_grad)))
@@ -136,12 +138,13 @@ def evaluate_function(engine, batch):
         result = {'loss': loss.item()}
         result.update(extra_losses)
 
-        xpred = spec(pred_mask * (X if X.ndim ==
-                                  pred_mask.ndim else X.unsqueeze(1)), inverse=True)
-                                  
+        Y = mwf(pred_mask, X)
+        xpred = spec(Y, inverse=True)
+
         batch = xpred.shape[0]
         sdrs = sdr(
             xpred.view(-1, *xpred.shape[-2:]), y.view(-1, *y.shape[-2:])).view(batch, -1).mean(0)
+
         for i, t in enumerate(targets_idx):
             result[f'{val_data.sources[t]}_sdr'] = sdrs[i].item()
         result['avg_sdr'] = sdrs.mean().item()
@@ -261,12 +264,14 @@ def predict_samples(engine):
         x = torch.from_numpy(x)
         tb_logger.writer.add_audio('mixture', x.t(), engine.state.epoch)
 
-        X = spec(x.to(device))
+        X = spec(x.to(device)).unsqueeze(0)
         X_mag = X.abs()
         with amp.autocast(enabled=amp_enabled):
-            pred_mask = model(X_mag.unsqueeze(0)).squeeze()
+            pred_mask = model(X_mag)
 
-        xpred = spec(pred_mask * X, inverse=True).cpu().clip(-1, 1)
+        Y = mwf(pred_mask, X).squeeze()
+
+        xpred = spec(Y, inverse=True).cpu().clip(-1, 1)
 
         if len(targets_idx) > 1:
             xpred = xpred.transpose(1, 2)

@@ -58,7 +58,7 @@
     },
     "data_loader": {
         "train": {
-            "batch_size": 8,
+            "batch_size": 4,
             "shuffle": true,
             "drop_last": true,
             "num_workers": 2,
@@ -66,7 +66,7 @@
             "pin_memory": true
         },
         "valid": {
-            "batch_size": 8,
+            "batch_size": 4,
             "num_workers": 2,
             "prefetch_factor": 4,
             "pin_memory": true
@@ -76,7 +76,7 @@
         "epochs": 100,
         "save_dir": "saved/",
         "log_dir": "runs/",
-        "cum_steps": 2,
+        "cum_steps": 1,
         "patience": 1000,
         "amp_enabled": false,
         "val_epoch_length": null,
