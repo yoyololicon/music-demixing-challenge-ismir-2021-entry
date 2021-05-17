@@ -70,8 +70,7 @@ class SpeedPerturb(torch.nn.Module):
             samp_index = torch.randint(len(self.speeds), (1,))[0]
             perturbed_audio = self.resamplers[samp_index](stems[:, i].contiguous())
             new_stems.append(perturbed_audio)
-            if perturbed_audio.shape[-1] < min_len:
-                min_len = perturbed_audio.shape[-1]
+            min_len = min(min_len, perturbed_audio.shape[-1])
 
         perturbed_stems = torch.zeros(
             stems.shape[0],
