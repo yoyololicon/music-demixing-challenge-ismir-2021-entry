@@ -64,15 +64,14 @@ class SpeedPerturb(torch.nn.Module):
         """
         # Perform source-wise random perturbation
         new_stems = []
+        # init min len
+        min_len = 2**32 
         for i in range(stems.shape[1]):
             samp_index = torch.randint(len(self.speeds), (1,))[0]
             perturbed_audio = self.resamplers[samp_index](stems[:, i].contiguous())
             new_stems.append(perturbed_audio)
-            if i == 0:
+            if perturbed_audio.shape[-1] < min_len:
                 min_len = perturbed_audio.shape[-1]
-            else:
-                if perturbed_audio.shape[-1] < min_len:
-                    min_len = perturbed_audio.shape[-1]
 
         perturbed_stems = torch.zeros(
             stems.shape[0],
