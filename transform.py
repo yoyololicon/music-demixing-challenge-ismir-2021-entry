@@ -41,6 +41,7 @@ class RandomGain(object):
         stems = stems * gains[:, None, None]
         return stems
 
+
 class SpeedPerturb(torch.nn.Module):
     def __init__(
         self, orig_freq=44100, speeds=[90, 100, 110]
@@ -53,7 +54,7 @@ class SpeedPerturb(torch.nn.Module):
         for s in self.speeds:
             new_freq = self.orig_freq * s // 100
             self.resamplers.append(
-                    torchaudio.transforms.Resample(self.orig_freq, new_freq))
+                torchaudio.transforms.Resample(self.orig_freq, new_freq))
 
     def forward(self, stems):
         """
@@ -65,23 +66,14 @@ class SpeedPerturb(torch.nn.Module):
         # Perform source-wise random perturbation
         new_stems = []
         # init min len
-        min_len = 2**32 
+        min_len = 2**32
         for i in range(stems.shape[1]):
             samp_index = torch.randint(len(self.speeds), (1,))[0]
-            perturbed_audio = self.resamplers[samp_index](stems[:, i].contiguous())
+            perturbed_audio = self.resamplers[samp_index](
+                stems[:, i].contiguous())
             new_stems.append(perturbed_audio)
             min_len = min(min_len, perturbed_audio.shape[-1])
 
-        perturbed_stems = torch.zeros(
-            stems.shape[0],
-            stems.shape[1],
-            2,
-            min_len,
-            device=stems.device,
-            dtype=torch.float,
-            )
-
-        for i, _ in enumerate(new_stems):
-            perturbed_stems[:, i] = new_stems[i][:, :, 0:min_len]
+        perturbed_stems = torch.stack([x[..., :min_len] for x in new_stems], 1)
 
         return perturbed_stems
