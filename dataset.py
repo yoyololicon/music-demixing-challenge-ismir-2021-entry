@@ -6,6 +6,7 @@ import soundfile as sf
 import os
 import yaml
 from tqdm import tqdm
+from typing import Optional, Callable
 
 
 __all__ = ['FastMUSDB']
@@ -31,6 +32,7 @@ class FastMUSDB(Dataset):
                  samples_per_track=64,
                  random=False,
                  random_track_mix=False,
+                 transform: Optional[Callable] = None
                  ):
         self.root = os.path.expanduser(root)
         self.seq_duration = seq_duration
@@ -42,6 +44,8 @@ class FastMUSDB(Dataset):
         self.random_track_mix = random_track_mix
         self.random = random
         self.sources = ['drums', 'bass', 'other', 'vocals']
+
+        self.transform = transform
 
         setup_path = os.path.join(
             musdb.__path__[0], 'configs', 'mus.yaml'
@@ -140,23 +144,15 @@ class FastMUSDB(Dataset):
             else:
                 folder_name, chunk_start = self._get_track_from_chunk(index)
             for s in self.sources:
-                g = 1
-                swap = False
                 if self.random_track_mix and self.random:
                     track_idx = self._get_random_track_idx()
                     folder_name, chunk_start = self.tracks[track_idx], self._get_random_start(
                         self.track_lenghts[track_idx])
-                    g = random.uniform(0.25, 1.25)
-                    if random.random() > 0.5:
-                        swap = True
                 source_name = os.path.join(folder_name, s + '.wav')
                 audio = sf.read(
                     source_name, frames=self.segment, start=chunk_start,
                     dtype='float32', always_2d=True, fill_value=0.
                 )[0].T
-                audio *= g
-                if swap:
-                    audio = np.flip(audio, 0)
                 stems.append(audio)
             if self.random_track_mix and self.random:
                 x = sum(stems)
@@ -168,6 +164,9 @@ class FastMUSDB(Dataset):
                 )[0].T
 
         y = np.stack(stems)
+        if self.transform is not None:
+            y = self.transform(y)
+            x = y.sum(0)
         return x.astype(np.float32), y.astype(np.float32)
 
 
