@@ -95,12 +95,10 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-        # x is seq_len, batch, channels
-        # x = x + self.pe[:x.size(0), :]
-
-        # x is batch, channels, seq_len
+        x = x.transpose(1, -1)
+        # Now x is batch, channels, seq_len
         x = x + self.pe[:, :, :x.size(2)]
-        return self.dropout(x)
+        return self.dropout(x).transpose(1, -1)
     
 class TransformerLayer(nn.Module):
     """
@@ -344,8 +342,8 @@ class Dual_Computation_Block(nn.Module):
         # intra RNN
         # [BS, K, N]
         intra = x.permute(0, 3, 2, 1).contiguous().view(B * S, K, N)
-        # [BS, K, H]
 
+        # [BS, K, H]
         intra = self.intra_mdl(intra)
 
         # [BS, K, N]
@@ -436,10 +434,9 @@ class Dual_Path_Model(nn.Module):
         num_layers=1,
         norm="ln",
         K=200,
-        num_spks=2,
+        num_spks=4,
         skip_around_intra=True,
         linear_layer_after_inter_intra=True,
-        use_global_pos_enc=False,
         max_length=20000,
     ):
         super(Dual_Path_Model, self).__init__()
@@ -448,25 +445,20 @@ class Dual_Path_Model(nn.Module):
         self.num_layers = num_layers
         self.norm = GlobalLayerNorm(in_channels, 3)
         self.conv1d = nn.Conv1d(in_channels, out_channels, 1, bias=False)
-        self.use_global_pos_enc = use_global_pos_enc
-
-        if self.use_global_pos_enc:
-            self.pos_enc = PositionalEncoding(max_length)
 
         self.dual_mdl = nn.ModuleList([])
-        for i in range(num_layers):
-            self.dual_mdl.append(
-                copy.deepcopy(
-                    Dual_Computation_Block(
-                        intra_model,
-                        inter_model,
-                        out_channels,
-                        norm,
-                        skip_around_intra=skip_around_intra,
-                        linear_layer_after_inter_intra=linear_layer_after_inter_intra,
-                    )
+        self.dual_mdl.append(
+            copy.deepcopy(
+                Dual_Computation_Block(
+                    intra_model,
+                    inter_model,
+                    out_channels,
+                    norm,
+                    skip_around_intra=skip_around_intra,
+                    linear_layer_after_inter_intra=linear_layer_after_inter_intra,
                 )
             )
+        )
 
         self.conv2d = nn.Conv2d(
             out_channels, out_channels * num_spks, kernel_size=1
@@ -508,15 +500,12 @@ class Dual_Path_Model(nn.Module):
 
         # [B, N, L]
         x = self.conv1d(x)
-        if self.use_global_pos_enc:
-            x = self.pos_enc(x.transpose(1, -1)).transpose(1, -1) + x * (
-                x.size(1) ** 0.5
-            )
 
         # [B, N, K, S]
         x, gap = self._Segmentation(x, self.K)
 
         # [B, N, K, S]
+        print("seg", x.shape)
         for i in range(self.num_layers):
             x = self.dual_mdl[i](x)
         x = self.prelu(x)
@@ -640,6 +629,99 @@ class Dual_Path_Model(nn.Module):
         return input
 
 
+class SEPFORMER(nn.Module):
+    def __init__(
+        self,    
+        encoder_kernel_size=16,
+        encoder_in_nchannels=2,
+        encoder_out_nchannels=256,
+        masknet_chunksize=250,
+        masknet_numlayers=2,
+        masknet_numspks=2,
+        intra_numlayers=8,
+        inter_numlayers=8,
+        intra_nhead=8,
+        inter_nhead=8,
+        intra_dffn=1024,
+        inter_dffn=1024,
+        intra_norm_before=True,
+        inter_norm_before=True,
+        ):
+
+        super(SEPFORMER, self).__init__()
+        self.encoder = Encoder(
+            kernel_size=encoder_kernel_size,
+            out_channels=encoder_out_nchannels,
+            in_channels=encoder_in_nchannels,
+        )
+        intra_model = nn.Sequential(*[
+                                        PositionalEncoding(
+                                        encoder_out_nchannels    
+                                        ),
+                                        *[
+                                            TransformerLayer(
+                                                encoder_out_nchannels, 
+                                                intra_nhead,
+                                                intra_dffn
+                                            ) for _ in range(intra_numlayers)
+                                         ]
+                                    ])
+        inter_model = nn.Sequential(*[
+                                        PositionalEncoding(
+                                        encoder_out_nchannels    
+                                        ),
+                                        *[
+                                            TransformerLayer(
+                                                encoder_out_nchannels, 
+                                                inter_nhead,
+                                                inter_dffn
+                                            ) for _ in range(inter_numlayers)
+                                         ]
+                                    ])
+        self.masknet = Dual_Path_Model(
+            in_channels=encoder_out_nchannels,
+            out_channels=encoder_out_nchannels,
+            intra_model=intra_model,
+            inter_model=inter_model,
+            num_layers=1,
+            K=masknet_chunksize,
+            num_spks=masknet_numspks,
+        )
+        self.decoder = Decoder(
+            in_channels=encoder_out_nchannels,
+            out_channels=encoder_in_nchannels,
+            kernel_size=encoder_kernel_size,
+            stride=encoder_kernel_size // 2,
+            bias=False,
+        )
+        self.num_spks = masknet_numspks
+
+
+    def forward(self, mix):
+
+        mix_w = self.encoder(mix)
+        est_mask = self.masknet(mix_w)
+        mix_w = torch.stack([mix_w] * self.num_spks)
+        sep_h = mix_w * est_mask
+
+        # Decoding
+        est_source = torch.cat(
+            [
+                self.decoder(sep_h[i]).unsqueeze(-1)
+                for i in range(self.num_spks)
+            ],
+            dim=-1,
+        )
+
+        # T changed after conv1d in encoder, fix it here
+        T_origin = mix.size(1)
+        T_est = est_source.size(1)
+        if T_origin > T_est:
+            est_source = F.pad(est_source, (0, 0, 0, T_origin - T_est))
+        else:
+            est_source = est_source[:, :T_origin, :]
+
+        return est_source
 
 
 if __name__ == "__main__":
@@ -665,10 +747,9 @@ if __name__ == "__main__":
     #torch.Size([10, 64, 100, 10])
     """
 
-    intra_block = nn.Sequential(*[TransformerLayer(64, 8) for _ in range(8)]) #TransformerLayer(64, 8)
-    inter_block = nn.Sequential(*[TransformerLayer(64, 8) for _ in range(8)]) #TransformerLayer(64, 8)
+    intra_block = nn.Sequential(*[PositionalEncoding(64) , *[TransformerLayer(64, 8) for _ in range(8)]])
+    inter_block = nn.Sequential(*[TransformerLayer(64, 8) for _ in range(8)])
     dual_path_model = Dual_Path_Model(64, 64, intra_block, inter_block, num_spks=4)
-    #x = torch.randn(10, 64, 2000)
     mask = dual_path_model(enc_out)
     print(mask.shape)
     #torch.Size([4, 8, 64, 255])
@@ -688,6 +769,10 @@ if __name__ == "__main__":
     )
     print(est_source.shape)
     #torch.Size([8, 2, 34, 4]) -> [B, Channel, L, Num_Sources]
+
+    sep = SEPFORMER(masknet_numspks=4)
+    out = sep.forward(spec)
+    print(out.shape)
 
 
 
