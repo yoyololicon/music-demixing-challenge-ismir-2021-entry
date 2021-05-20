@@ -293,7 +293,6 @@ class Dual_Computation_Block(nn.Module):
         intra_mdl,
         inter_mdl,
         out_channels,
-        norm="ln",
         skip_around_intra=True,
         linear_layer_after_inter_intra=True,
     ):
@@ -305,10 +304,8 @@ class Dual_Computation_Block(nn.Module):
         self.linear_layer_after_inter_intra = linear_layer_after_inter_intra
 
         # Norm
-        self.norm = norm
-        if norm is not None:
-            self.intra_norm = GlobalLayerNorm(out_channels, 4)
-            self.inter_norm = GlobalLayerNorm(out_channels, 4)
+        self.intra_norm = GlobalLayerNorm(out_channels, 4)
+        self.inter_norm = GlobalLayerNorm(out_channels, 4)
 
         # Linear
         if linear_layer_after_inter_intra:
@@ -354,8 +351,7 @@ class Dual_Computation_Block(nn.Module):
         intra = intra.view(B, S, K, N)
         # [B, N, K, S]
         intra = intra.permute(0, 3, 2, 1).contiguous()
-        if self.norm is not None:
-            intra = self.intra_norm(intra)
+        intra = self.intra_norm(intra)
         # [B, N, K, S]
         if self.skip_around_intra:
             intra = intra + x
@@ -374,8 +370,7 @@ class Dual_Computation_Block(nn.Module):
         inter = inter.view(B, K, S, N)
         # [B, N, K, S]
         inter = inter.permute(0, 3, 1, 2).contiguous()
-        if self.norm is not None:
-            inter = self.inter_norm(inter)
+        inter = self.inter_norm(inter)
         # [B, N, K, S]
         out = inter + intra
 
@@ -432,7 +427,6 @@ class Dual_Path_Model(nn.Module):
         intra_model,
         inter_model,
         num_layers=1,
-        norm="ln",
         K=200,
         num_spks=4,
         skip_around_intra=True,
@@ -453,7 +447,6 @@ class Dual_Path_Model(nn.Module):
                     intra_model,
                     inter_model,
                     out_channels,
-                    norm,
                     skip_around_intra=skip_around_intra,
                     linear_layer_after_inter_intra=linear_layer_after_inter_intra,
                 )
@@ -644,8 +637,6 @@ class SEPFORMER(nn.Module):
         inter_nhead=8,
         intra_dffn=1024,
         inter_dffn=1024,
-        intra_norm_before=True,
-        inter_norm_before=True,
         ):
 
         super(SEPFORMER, self).__init__()
