@@ -253,10 +253,10 @@ class Decoder(nn.ConvTranspose1d):
             )
         x = super().forward(x if x.dim() == 3 else torch.unsqueeze(x, 1))
 
-        if torch.squeeze(x).dim() == 1:
-            x = torch.squeeze(x, dim=1)
-        else:
-            x = torch.squeeze(x)
+        #if torch.squeeze(x).dim() == 1:
+        #    x = torch.squeeze(x, dim=1)
+        #else:
+        #    x = torch.squeeze(x)
         return x
 
 class Dual_Computation_Block(nn.Module):
@@ -294,7 +294,7 @@ class Dual_Computation_Block(nn.Module):
         inter_mdl,
         out_channels,
         skip_around_intra=True,
-        linear_layer_after_inter_intra=True,
+        linear_layer_after_inter_intra=False,
     ):
         super(Dual_Computation_Block, self).__init__()
 
@@ -426,7 +426,7 @@ class Dual_Path_Model(nn.Module):
         out_channels,
         intra_model,
         inter_model,
-        num_layers=1,
+        num_layers=2,
         K=200,
         num_spks=4,
         skip_around_intra=True,
@@ -441,17 +441,18 @@ class Dual_Path_Model(nn.Module):
         self.conv1d = nn.Conv1d(in_channels, out_channels, 1, bias=False)
 
         self.dual_mdl = nn.ModuleList([])
-        self.dual_mdl.append(
-            copy.deepcopy(
-                Dual_Computation_Block(
-                    intra_model,
-                    inter_model,
-                    out_channels,
-                    skip_around_intra=skip_around_intra,
-                    linear_layer_after_inter_intra=linear_layer_after_inter_intra,
+        for _ in range(num_layers):
+            self.dual_mdl.append(
+                copy.deepcopy(
+                    Dual_Computation_Block(
+                        intra_model,
+                        inter_model,
+                        out_channels,
+                        skip_around_intra=skip_around_intra,
+                        linear_layer_after_inter_intra=linear_layer_after_inter_intra,
+                    )
                 )
             )
-        )
 
         self.conv2d = nn.Conv2d(
             out_channels, out_channels * num_spks, kernel_size=1
@@ -498,7 +499,6 @@ class Dual_Path_Model(nn.Module):
         x, gap = self._Segmentation(x, self.K)
 
         # [B, N, K, S]
-        print("seg", x.shape)
         for i in range(self.num_layers):
             x = self.dual_mdl[i](x)
         x = self.prelu(x)
@@ -674,7 +674,7 @@ class SEPFORMER(nn.Module):
             out_channels=encoder_out_nchannels,
             intra_model=intra_model,
             inter_model=inter_model,
-            num_layers=1,
+            num_layers=masknet_numlayers,
             K=masknet_chunksize,
             num_spks=masknet_numspks,
         )
@@ -705,8 +705,8 @@ class SEPFORMER(nn.Module):
         )
 
         # T changed after conv1d in encoder, fix it here
-        T_origin = mix.size(1)
-        T_est = est_source.size(1)
+        T_origin = mix.shape[1]
+        T_est = est_source.shape[1]
         if T_origin > T_est:
             est_source = F.pad(est_source, (0, 0, 0, T_origin - T_est))
         else:
@@ -719,7 +719,7 @@ if __name__ == "__main__":
     enc = Encoder(kernel_size=16, in_channels=2)
     dec = Decoder(kernel_size=16, in_channels=64, out_channels=2, stride=8)
 
-    spec = torch.rand(8, 2, 256)
+    spec = torch.rand(8, 2, 1284)
 
     enc_out = enc(spec)
     print(enc_out.shape)
