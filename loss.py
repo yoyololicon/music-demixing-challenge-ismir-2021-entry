@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from model import Spec
 from itertools import combinations, chain
 from utils import MWF
+from model.sepformer import Decoder
 
 
 class _Loss(torch.nn.Module):
@@ -80,6 +81,7 @@ class CLoss(_Loss):
         else:
             Y = msk_hat * mix_spec.unsqueeze(1)
         pred = self.spec(Y, inverse=True)
+        print(pred.shape)
         if self.complex_mse:
             loss_f = complex_mse_loss(Y, gt_spec)
         else:
@@ -91,6 +93,20 @@ class CLoss(_Loss):
             "loss_t": loss_t.item()
         }
 
+
+class CLoss2(_Loss):
+    def __init__(self, mcoeff=10, n_fft=4096, hop_length=1024, complex_mse=True, **mwf_kwargs):
+        super().__init__()
+        self.mcoeff = mcoeff
+        self.spec = Spec(n_fft, hop_length)
+        self.complex_mse = complex_mse
+
+    def _core_loss(self, pred, gt, mix):
+        loss_t = sdr_loss(pred, gt, mix)
+        loss = self.mcoeff * loss_t
+        return loss, {
+            "loss_t": loss_t.item()
+        }
 
 def bce_loss(msk_hat, gt_spec):
     assert msk_hat.shape == gt_spec.shape
