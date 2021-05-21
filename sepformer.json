@@ -1,0 +1,109 @@
+{
+    "name": "Sepformer",
+    "arch": {
+        "type": "SEPFORMER",
+        "args": {
+            "encoder_kernel_size": 32,
+            "encoder_in_nchannels": 2,
+            "encoder_out_nchannels": 128,
+            "masknet_chunksize": 250,
+            "masknet_numlayers": 1,
+            "masknet_numspks": 4,
+            "intra_numlayers": 6,
+            "inter_numlayers": 6,
+            "intra_nhead": 4,
+            "inter_nhead": 4,
+            "intra_dffn": 512,
+            "inter_dffn": 512
+        }
+    },
+    "dataset": {
+        "train": {
+            "type": "FastMUSDB",
+            "args": {
+                "root": "./Datasets/musdb18hq/",
+                "subsets": "train",
+                "split": null,
+                "seq_duration": 2.4,
+                "samples_per_track": 64,
+                "random": true,
+                "random_track_mix": true
+            }
+        },
+        "valid": {
+            "type": "FastMUSDB",
+            "args": {
+                "root": "./Datasets/musdb18hq/",
+                "subsets": "test",
+                "split": null,
+                "seq_duration": 2.4
+            }
+        }
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args": {
+            "lr": 1e-4,
+            "weight_decay": 1e-5
+        }
+    },
+    "loss": {
+        "type": "CLoss2",
+        "args": {
+            "mcoeff": 10,
+            "n_fft": 4096,
+            "hop_length": 1024
+        }
+    },
+    "lr_scheduler": {
+        "type": "ReduceLROnPlateau",
+        "args": {
+            "factor": 0.3,
+            "patience": 80,
+            "verbose": true
+        }
+    },
+    "data_loader": {
+        "train": {
+            "batch_size": 4,
+            "shuffle": true,
+            "drop_last": true,
+            "num_workers": 2,
+            "prefetch_factor": 4,
+            "pin_memory": true
+        },
+        "valid": {
+            "batch_size": 4,
+            "num_workers": 2,
+            "prefetch_factor": 4,
+            "pin_memory": true
+        }
+    },
+    "trainer": {
+        "epochs": 100,
+        "save_dir": "saved/",
+        "log_dir": "runs/",
+        "cum_steps": 2,
+        "patience": 1000,
+        "amp_enabled": false,
+        "val_epoch_length": null,
+        "validate_every": 1,
+        "targets": [
+            "bass",
+            "drums",
+            "vocals",
+            "other"
+        ],
+        "n_fft": 4096,
+        "hop_length": 1024,
+        "extra_monitor": [
+            "loss_t"
+        ]
+    },
+    "MWF": {
+        "residual_model": false,
+        "softmask": false,
+        "alpha": 1.0,
+        "n_iter": 1
+    }
+}
