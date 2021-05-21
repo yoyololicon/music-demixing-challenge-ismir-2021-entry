@@ -712,7 +712,7 @@ class SEPFORMER(nn.Module):
         else:
             est_source = est_source[:, :T_origin, :]
 
-        return est_source
+        return est_mask, est_source
 
 
 if __name__ == "__main__":
