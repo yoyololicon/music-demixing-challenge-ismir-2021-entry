@@ -17,7 +17,7 @@ validate(config, schema=CONFIG_SCHEMA)
 checkpoint = torch.load(args.checkpoint)
 
 model = get_instance(module_arch, config['arch'])
-model.load_state_dict(checkpoint['model'])
+model.load_state_dict(checkpoint['model'], map_location='cpu')
 model.eval()
 
 jitted = torch.jit.script(model)
