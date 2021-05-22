@@ -4,6 +4,10 @@ import torch.nn.functional as F
 
 
 class X_UMX(nn.Module):
+    __constants__ = ['max_bins']
+
+    max_bins: int
+
     def __init__(
         self,
         n_fft=4096,
