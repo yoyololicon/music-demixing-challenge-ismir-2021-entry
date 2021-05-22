@@ -3,8 +3,6 @@ import torch.nn.functional as F
 from model import Spec
 from itertools import combinations, chain
 from utils import MWF
-from model.sepformer import Decoder
-
 
 class _Loss(torch.nn.Module):
     r"""Base class for all loss modules.
