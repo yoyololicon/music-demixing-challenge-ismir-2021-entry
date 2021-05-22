@@ -251,12 +251,16 @@ def score_function(engine):
     return -engine.state.metrics['loss']
 
 
+def sdr_score_function(engine):
+    return engine.state.metrics['avg_sdr']
+
+
 handler = EarlyStopping(
     patience=patience, score_function=score_function, trainer=trainer)
 evaluator.add_event_handler(Events.COMPLETED, handler)
 
 checkpointer = ModelCheckpoint(
-    save_dir, model_name, n_saved=2, create_dir=True, require_empty=False)
+    save_dir, model_name, score_function=sdr_score_function, n_saved=2, create_dir=True, require_empty=False)
 to_save = {
     'model': model,
     'optimizer': optimizer,
@@ -264,8 +268,8 @@ to_save = {
     'trainer': trainer,
     'scaler': scaler
 }
-trainer.add_event_handler(
-    Events.EPOCH_COMPLETED,
+evaluator.add_event_handler(
+    Events.COMPLETED,
     checkpointer,
     to_save
 )
