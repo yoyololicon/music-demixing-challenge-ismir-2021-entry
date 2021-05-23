@@ -14,10 +14,10 @@ args = parser.parse_args()
 
 config = json.load(open(args.config))
 validate(config, schema=CONFIG_SCHEMA)
-checkpoint = torch.load(args.checkpoint)
+checkpoint = torch.load(args.checkpoint, map_location='cpu')
 
 model = get_instance(module_arch, config['arch'])
-model.load_state_dict(checkpoint['model'], map_location='cpu')
+model.load_state_dict(checkpoint['model'])
 model.eval()
 
 jitted = torch.jit.script(model)
