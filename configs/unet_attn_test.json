@@ -53,17 +53,17 @@
     },
     "data_loader": {
         "train": {
-            "batch_size": 10,
+            "batch_size": 1,
             "shuffle": true,
             "drop_last": true,
             "num_workers": 2,
-            "prefetch_factor": 6,
+            "prefetch_factor": 2,
             "pin_memory": true
         },
         "valid": {
-            "batch_size": 10,
+            "batch_size": 1,
             "num_workers": 2,
-            "prefetch_factor": 6,
+            "prefetch_factor": 2,
             "pin_memory": true
         }
     },
