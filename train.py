@@ -152,6 +152,9 @@ def evaluate_function(engine, batch):
         result = {'loss': loss.item()}
         result.update(extra_losses)
 
+        if pred_mask.ndim == X_mag.ndim:
+            pred_mask = pred_mask.unsqueeze(1)
+
         Y = mwf(pred_mask, X)
         xpred = spec(Y, inverse=True)
 
@@ -286,6 +289,9 @@ def predict_samples(engine):
         X_mag = X.abs()
         with amp.autocast(enabled=amp_enabled):
             pred_mask = model(X_mag)
+
+        if pred_mask.ndim == X_mag.ndim:
+            pred_mask = pred_mask.unsqueeze(1)
 
         Y = mwf(pred_mask, X).squeeze()
 
