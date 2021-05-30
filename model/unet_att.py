@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-import math
+from typing import List
 
 
 class ConvBlock(nn.Module):
@@ -66,6 +66,20 @@ class ConvTransposeBlock(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
+    __constants__ = [
+        'out_channels',
+        'd_model',
+        'n_heads',
+        'query_shape',
+        'memory_flange'
+    ]
+
+    max_bins: int
+    d_model: int
+    n_heads: int
+    query_shape: int
+    memory_flange: int
+
     def __init__(self, in_channels, out_channels, d_model=32, n_heads=8, query_shape=24, memory_flange=8):
         super().__init__()
 
@@ -95,9 +109,9 @@ class MultiHeadAttention(nn.Module):
         q = self._pad_to_multiple_2d(self.q_conv(x), self.query_shape)
         k = self._pad_to_multiple_2d(self.k_conv(x), self.query_shape)
         v = self._pad_to_multiple_2d(self.v_conv(x), self.query_shape)
-        q = q.view(q.shape[0], self.n_heads, -1, *q.shape[2:])
-        k = k.view(k.shape[0], self.n_heads, -1, *k.shape[2:])
-        v = v.view(v.shape[0], self.n_heads, -1, *v.shape[2:])
+        q = q.view((q.shape[0], self.n_heads, -1) + q.shape[2:])
+        k = k.view((k.shape[0], self.n_heads, -1) + k.shape[2:])
+        v = v.view((v.shape[0], self.n_heads, -1) + v.shape[2:])
 
         k_depth_per_head = self.d_model // self.n_heads
         q *= k_depth_per_head ** -0.5
@@ -105,13 +119,16 @@ class MultiHeadAttention(nn.Module):
         k = F.pad(k, [self.memory_flange] * 2)
         v = F.pad(v, [self.memory_flange] * 2)
 
-        unfold_q = q.view(*q.shape[:4],
-                          q.shape[4] // self.query_shape, self.query_shape)
-        new_shape = unfold_q.shape[:4] + (
-            unfold_q.shape[4], self.memory_flange * 2 + unfold_q.shape[5])
-        new_stride = unfold_q.stride()
-        unfold_k = torch.as_strided(k, new_shape, new_stride)
-        unfold_v = torch.as_strided(v, new_shape, new_stride)
+        unfold_q = q.view(
+            q.shape[:4] + (q.shape[4] // self.query_shape, self.query_shape))
+        unfold_k = k.unfold(-1, self.query_shape +
+                            self.memory_flange * 2, self.query_shape)
+        unfold_v = v.unfold(-1, self.query_shape +
+                            self.memory_flange * 2, self.query_shape)
+
+        # new_stride = unfold_q.stride()
+        # unfold_k = torch.as_strided(k, new_shape, new_stride)
+        # unfold_v = torch.as_strided(v, new_shape, new_stride)
 
         unfold_q = unfold_q.permute(0, 1, 4, 3, 5, 2)
         tmp = unfold_q.shape
@@ -129,7 +146,7 @@ class MultiHeadAttention(nn.Module):
         weights = logits.softmax(-1)
         out = weights @ unfold_v
 
-        out = out.view(*tmp).permute(0, 1, 5, 3, 2, 4)
+        out = out.view(tmp).permute(0, 1, 5, 3, 2, 4)
         out = out.reshape(out.shape[0], out.shape[1] *
                           out.shape[2], out.shape[3], -1)
         out = out[..., :x.shape[2], :x.shape[3]]
@@ -218,12 +235,15 @@ class UNetAttn(nn.Module):
 
         x = torch.cat([x, self.attn(x)], 1)
 
-        for conv, sk in zip(self.up_convs, skips[::-1]):
+        i = len(skips) - 1
+        for conv in self.up_convs:
+            sk = skips[i]
             x = conv(x)
             if x.shape[2] < sk.shape[2] or x.shape[3] < sk.shape[3]:
                 x = F.pad(x, [0, sk.shape[3] - x.shape[3],
                               0, sk.shape[2] - x.shape[2]])
             x = torch.cat([x, sk], 1)
+            i -= 1
         x = self.end(x)
 
         x = F.pad(x, [0, spec.shape[3] - x.shape[3], 0,
@@ -233,7 +253,7 @@ class UNetAttn(nn.Module):
 
 if __name__ == "__main__":
     net = UNetAttn()
-    #net = torch.jit.script(net)
+    net = torch.jit.script(net)
     print(net)
     print(sum(p.numel() for p in net.parameters() if p.requires_grad))
     x = torch.rand(1, 2, 2049, 512)
