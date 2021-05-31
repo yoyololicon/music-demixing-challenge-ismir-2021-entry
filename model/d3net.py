@@ -28,7 +28,7 @@ class D2_block(_Base):
         for i in range(L):
             self.conv_layers.append(
                 nn.Conv2d(
-                    k,
+                    k if i > 0 else in_channels,
                     k * (L - i),
                     3,
                     padding=2 ** i,

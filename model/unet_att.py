@@ -90,9 +90,7 @@ class MultiHeadAttention(nn.Module):
         self.query_shape = query_shape
         self.memory_flange = memory_flange
 
-        self.q_conv = nn.Conv2d(in_channels, d_model, 3, padding=1)
-        self.k_conv = nn.Conv2d(in_channels, d_model, 3, padding=1)
-        self.v_conv = nn.Conv2d(in_channels, d_model, 3, padding=1)
+        self.qkv_conv = nn.Conv2d(in_channels, d_model * 3, 3, padding=1)
         self.out_conv = nn.Conv2d(
             d_model, out_channels, 3, padding=1, bias=False)
 
@@ -107,20 +105,17 @@ class MultiHeadAttention(nn.Module):
         return x
 
     def forward(self, x):
-        q = self._pad_to_multiple_2d(self.q_conv(x), self.query_shape)
-        k = self._pad_to_multiple_2d(self.k_conv(x), self.query_shape)
-        v = self._pad_to_multiple_2d(self.v_conv(x), self.query_shape)
-        q = q.view((q.shape[0], self.n_heads, -1) + q.shape[2:])
-        k = k.view((k.shape[0], self.n_heads, -1) + k.shape[2:])
-        v = v.view((v.shape[0], self.n_heads, -1) + v.shape[2:])
+        qkv = self._pad_to_multiple_2d(self.qkv_conv(x), self.query_shape)
+        qkv = qkv.view((qkv.shape[0], self.n_heads, -1) + qkv.shape[2:])
+        q, k, v = qkv.chunk(3, 2)
 
         k_depth_per_head = self.d_model // self.n_heads
-        q *= k_depth_per_head ** -0.5
+        q = q * k_depth_per_head ** -0.5
 
         k = F.pad(k, [self.memory_flange] * 2)
         v = F.pad(v, [self.memory_flange] * 2)
 
-        unfold_q = q.view(
+        unfold_q = q.reshape(
             q.shape[:4] + (q.shape[4] // self.query_shape, self.query_shape))
         unfold_k = k.unfold(-1, self.query_shape +
                             self.memory_flange * 2, self.query_shape)
@@ -262,7 +257,6 @@ if __name__ == "__main__":
     print(net)
     print(sum(p.numel() for p in net.parameters()
               if p.requires_grad), net.conv_n_filters)
-    exit()
     x = torch.rand(1, 2, 2049, 512)
     y = net(x)
     print(y.shape)
