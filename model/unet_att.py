@@ -157,30 +157,30 @@ class MultiHeadAttention(nn.Module):
 
 
 class UNetAttn(nn.Module):
-    def __init__(self, max_bins=1487):
+    def __init__(self, max_bins=1487, k=12):
         super().__init__()
         self.max_bins = max_bins
-        self.conv_n_filters = [16, 32, 64, 128, 256, 512]
+        layers = 6
+        self.conv_n_filters = []
 
         in_channels = 2
         self.down_convs = nn.ModuleList()
 
-        for i, out_channels in enumerate(self.conv_n_filters):
-            L = max(2, len(self.conv_n_filters) - i - 1)
+        for i in range(layers):
+            L = max(2, layers - i - 1)
             tmp = D3_block(
                 in_channels, M=2,
-                k=16, L=L, last_n_layers=L
+                k=k, L=L, last_n_layers=L
             )
+            out_channels = tmp.get_output_channels()
             self.down_convs.append(
                 nn.Sequential(
                     tmp,
-                    nn.Conv2d(tmp.get_output_channels(),
-                              out_channels, 3, stride=2, padding=1, bias=False),
-                    nn.BatchNorm2d(out_channels),
-                    nn.ReLU(inplace=True)
+                    nn.AvgPool2d(2, 2)
                 )
             )
             in_channels = out_channels
+            self.conv_n_filters.append(out_channels)
 
         self.attn = nn.Sequential(
             MultiHeadAttention(in_channels, 256, 128,
@@ -197,10 +197,10 @@ class UNetAttn(nn.Module):
         concat_channels = 256
         n_droupout = 3
         for i in range(len(self.conv_n_filters) - 2, -1, -1):
-            L = max(2, len(self.conv_n_filters) - i - 1)
+            L = max(2, layers - i - 1)
             d3 = D3_block(
                 self.conv_n_filters[i + 1] + concat_channels, M=2,
-                k=16, L=L, last_n_layers=L
+                k=k, L=L, last_n_layers=L
             )
             tmp = [
                 d3,
@@ -260,7 +260,9 @@ if __name__ == "__main__":
     net = UNetAttn()
     # net = torch.jit.script(net)
     print(net)
-    print(sum(p.numel() for p in net.parameters() if p.requires_grad))
+    print(sum(p.numel() for p in net.parameters()
+              if p.requires_grad), net.conv_n_filters)
+    exit()
     x = torch.rand(1, 2, 2049, 512)
     y = net(x)
     print(y.shape)
