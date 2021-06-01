@@ -72,8 +72,7 @@ scheduler = get_instance(optim.lr_scheduler, config['lr_scheduler'], optimizer)
 criterion = get_instance(module_loss, config['loss']).to(device)
 
 sdr = module_loss.SDR()
-mwf_kwargs = config.get('MWF', {})
-mwf = MWF(**mwf_kwargs)
+
 
 print('Trainable parameters: {}'.format(sum(p.numel()
                                             for p in model.parameters() if p.requires_grad)))
@@ -84,15 +83,23 @@ log_dir = config['trainer']['log_dir']
 save_dir = config['trainer']['save_dir']
 targets = config['trainer']['targets']
 amp_enabled = config['trainer']['amp_enabled']
-n_fft = config['trainer']['n_fft']
-hop_length = config['trainer']['hop_length']
 accumulation_steps = config['trainer']['cum_steps']
 extra_monitor = config['trainer']['extra_monitor']
 validate_every = config['trainer']['validate_every']
 val_epoch_length = config['trainer']['val_epoch_length']
 patience = config['trainer']['patience']
 epochs = config['trainer']['epochs']
-time_domain = config['trainer'].get("time_domain", False)
+n_fft = config['trainer'].get('n_fft', 4096)
+hop_length = config['trainer'].get('hop_length', 1024)
+time_domain = config['trainer'].get('time_domain', False)
+mwf_kwargs = config.get('MWF', {})
+
+if time_domain:
+    def spec(x): return x
+    def mwf(x): return x
+else:
+    spec = module_arch.Spec(n_fft, hop_length).to(device)
+    mwf = MWF(**mwf_kwargs)
 
 # get target index
 targets_idx = []
@@ -101,9 +108,7 @@ for t in targets:
 assert len(targets_idx) > 0
 targets_idx = sorted(targets_idx)
 
-
 scaler = amp.GradScaler(enabled=amp_enabled)
-spec = module_arch.Spec(n_fft, hop_length).to(device)
 
 
 def _process_core(x, y):
