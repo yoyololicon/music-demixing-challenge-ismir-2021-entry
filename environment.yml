@@ -16,6 +16,8 @@ dependencies:
   - pysoundfile
   - tqdm
   - jsonschema
+  - torchvision
+  - ffmpeg
   - pip:
     - torch-optimizer
     - musdb
