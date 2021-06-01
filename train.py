@@ -72,8 +72,7 @@ scheduler = get_instance(optim.lr_scheduler, config['lr_scheduler'], optimizer)
 criterion = get_instance(module_loss, config['loss']).to(device)
 
 sdr = module_loss.SDR()
-mwf_kwargs = config.get('MWF', {})
-mwf = MWF(**mwf_kwargs)
+
 
 print('Trainable parameters: {}'.format(sum(p.numel()
                                             for p in model.parameters() if p.requires_grad)))
@@ -84,14 +83,23 @@ log_dir = config['trainer']['log_dir']
 save_dir = config['trainer']['save_dir']
 targets = config['trainer']['targets']
 amp_enabled = config['trainer']['amp_enabled']
-n_fft = config['trainer']['n_fft']
-hop_length = config['trainer']['hop_length']
 accumulation_steps = config['trainer']['cum_steps']
 extra_monitor = config['trainer']['extra_monitor']
 validate_every = config['trainer']['validate_every']
 val_epoch_length = config['trainer']['val_epoch_length']
 patience = config['trainer']['patience']
 epochs = config['trainer']['epochs']
+n_fft = config['trainer'].get('n_fft', 4096)
+hop_length = config['trainer'].get('hop_length', 1024)
+time_domain = config['trainer'].get('time_domain', False)
+mwf_kwargs = config.get('MWF', {})
+
+if time_domain:
+    def spec(x): return x
+    def mwf(x): return x
+else:
+    spec = module_arch.Spec(n_fft, hop_length).to(device)
+    mwf = MWF(**mwf_kwargs)
 
 # get target index
 targets_idx = []
@@ -100,9 +108,21 @@ for t in targets:
 assert len(targets_idx) > 0
 targets_idx = sorted(targets_idx)
 
-
 scaler = amp.GradScaler(enabled=amp_enabled)
-spec = module_arch.Spec(n_fft, hop_length).to(device)
+
+
+def _process_core(x, y):
+    if time_domain:
+        with amp.autocast(enabled=amp_enabled):
+            pred = model(x)
+        return criterion(pred, y, x) + (pred,)
+
+    X = spec(x)
+    Y = spec(y)
+    X_mag = X.abs()
+    with amp.autocast(enabled=amp_enabled):
+        pred_mask = model(X_mag)
+    return criterion(pred_mask, Y, X, y, x) + (pred_mask, X)
 
 
 def process_function(engine, batch):
@@ -115,13 +135,7 @@ def process_function(engine, batch):
         x = y.sum(1)
     y = y[:, targets_idx].squeeze(1)
 
-    X = spec(x)
-    Y = spec(y)
-    X_mag = X.abs()
-    with amp.autocast(enabled=amp_enabled):
-        pred_mask = model(X_mag)
-
-    loss, extra_losses = criterion(pred_mask, Y, X, y, x)
+    loss, extra_losses, *_ = _process_core(x, y)
     loss /= accumulation_steps
     scaler.scale(loss).backward()
 
@@ -135,6 +149,21 @@ def process_function(engine, batch):
     return result
 
 
+def _eval_core(x, y):
+    ret = _process_core(x, y)
+    if time_domain:
+        return ret
+
+    loss, extra_losses, pred_mask, X = ret
+
+    if pred_mask.ndim == X.ndim:
+        pred_mask = pred_mask.unsqueeze(1)
+
+    Y = mwf(pred_mask, X)
+    xpred = spec(Y, inverse=True)
+    return loss, extra_losses, xpred
+
+
 def evaluate_function(engine, batch):
     model.eval()
     with torch.no_grad():
@@ -142,21 +171,9 @@ def evaluate_function(engine, batch):
         y = y[:, targets_idx].squeeze(1)
         x, y = x.to(device), y.to(device)
 
-        X = spec(x)
-        Y = spec(y)
-        X_mag = X.abs()
-        with amp.autocast(enabled=amp_enabled):
-            pred_mask = model(X_mag)
-
-        loss, extra_losses = criterion(pred_mask, Y, X, y, x)
+        loss, extra_losses, xpred = _eval_core(x, y)
         result = {'loss': loss.item()}
         result.update(extra_losses)
-
-        if pred_mask.ndim == X_mag.ndim:
-            pred_mask = pred_mask.unsqueeze(1)
-
-        Y = mwf(pred_mask, X)
-        xpred = spec(Y, inverse=True)
 
         batch = xpred.shape[0]
         sdrs = sdr(
@@ -243,8 +260,9 @@ tb_logger.attach_opt_params_handler(
 )
 
 # add model graph
-test_input = spec(torch.from_numpy(
-    val_data[0][0]).to(device)).abs().unsqueeze(0)
+test_input = torch.from_numpy(val_data[0][0]).to(device).unsqueeze(0)
+if not time_domain:
+    test_input = spec(test_input).abs()
 tb_logger.writer.add_graph(model, input_to_model=test_input)
 
 # early stop
@@ -278,6 +296,25 @@ evaluator.add_event_handler(
 )
 
 
+def _predict_core(x):
+    x = x.unsqueeze(0)
+    if time_domain:
+        with amp.autocast(enabled=amp_enabled):
+            return model(x).squeeze()
+
+    X = spec(x)
+    X_mag = X.abs()
+    with amp.autocast(enabled=amp_enabled):
+        pred_mask = model(X_mag)
+
+    if pred_mask.ndim == X_mag.ndim:
+        pred_mask = pred_mask.unsqueeze(1)
+
+    Y = mwf(pred_mask, X).squeeze()
+    xpred = spec(Y, inverse=True)
+    return xpred
+
+
 def predict_samples(engine):
     model.eval()
     with torch.no_grad():
@@ -285,17 +322,7 @@ def predict_samples(engine):
         x = torch.from_numpy(x)
         tb_logger.writer.add_audio('mixture', x.t(), engine.state.epoch)
 
-        X = spec(x.to(device)).unsqueeze(0)
-        X_mag = X.abs()
-        with amp.autocast(enabled=amp_enabled):
-            pred_mask = model(X_mag)
-
-        if pred_mask.ndim == X_mag.ndim:
-            pred_mask = pred_mask.unsqueeze(1)
-
-        Y = mwf(pred_mask, X).squeeze()
-
-        xpred = spec(Y, inverse=True).cpu().clip(-1, 1)
+        xpred = _predict_core(x.to(device)).cpu().clip(-1, 1)
 
         if len(targets_idx) > 1:
             xpred = xpred.transpose(1, 2)
@@ -309,6 +336,7 @@ def predict_samples(engine):
 
 
 trainer.add_event_handler(Events.EPOCH_COMPLETED, predict_samples)
+
 
 if args.checkpoint:
     checkpoint = torch.load(args.checkpoint)
