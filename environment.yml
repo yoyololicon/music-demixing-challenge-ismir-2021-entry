@@ -5,7 +5,7 @@ channels:
   - pytorch
   - nvidia
 
-create_default_packages:
+dependencies:
   - pip
   - pytorch
   - torchaudio
@@ -15,6 +15,7 @@ create_default_packages:
   - tensorboardX
   - pysoundfile
   - tqdm
+  - jsonschema
   - pip:
     - torch-optimizer
     - musdb
