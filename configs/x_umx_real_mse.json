@@ -45,7 +45,8 @@
         "args": {
             "mcoeff": 10,
             "n_fft": 4096,
-            "hop_length": 1024
+            "hop_length": 1024,
+	    "complex_mse": false
         }
     },
     "lr_scheduler": {
