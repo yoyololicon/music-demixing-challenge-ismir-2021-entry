@@ -71,7 +71,7 @@ class D2_block(_Base):
                 input = input + skips.pop(0)
                 skips = [s + t for s, t in zip(skips, tmp)]
             else:
-                skips = tmp
+                skips = list(tmp)
             input = bn(input)
             outputs.append(input)
 
