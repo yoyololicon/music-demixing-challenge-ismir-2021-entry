@@ -1,6 +1,8 @@
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.autograd import Function
+import torch.distributions as distributions
 
 
 # Brought from https://github.com/distsup/DistSup/blob/b05ef514cbb8863e28cd3c41b267c5b9d6226a82/distsup/modules/bottlenecks.py#L602
@@ -96,3 +98,18 @@ def get_indices(inputs, codebook, temperature=None):
             m = torch.distributions.Categorical(probs)
             indices = m.sample()
         return indices
+
+
+# Brought from https://github.com/distsup/DistSup/blob/b05ef514cbb8863e28cd3c41b267c5b9d6226a82/distsup/modules/bottlenecks.py#L459
+def get_code_usage(codebook, indices):
+    num_tokens = codebook.weight.size(0)
+    code_freqs = torch.histc(
+        indices.float(),
+        bins=num_tokens, min=-0.5, max=num_tokens - 0.5
+        ).float()
+    count = np.prod(indices.size())
+    assert code_freqs.sum().item() == count
+    code_freqs /= count
+    entropy = distributions.Categorical(code_freqs).entropy()
+
+    return entropy.item() / np.log(num_tokens)
