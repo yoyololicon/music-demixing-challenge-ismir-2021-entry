@@ -42,6 +42,20 @@ class RandomGain(object):
         return stems
 
 
+class RandomFlipPhase(RandomSwapLR):
+    def __call__(self, stems: np.ndarray):
+        """
+        Args:
+            stems (np.array): (Num_sources, Num_channels, L)
+        Return:
+            stems (np.array): (Num_sources, Num_channels, L)
+        """
+        for i in range(stems.shape[0]):
+            if random.random() < self.p:
+                stems[i] *= -1
+        return stems
+
+
 class SpeedPerturb(torch.nn.Module):
     def __init__(
         self, orig_freq=44100, speeds=[90, 100, 110]

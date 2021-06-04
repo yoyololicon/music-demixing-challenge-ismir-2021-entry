@@ -46,7 +46,8 @@ else:
 # define data augmentation transformss
 cpu_trsfm = Compose([
     module_transform.RandomGain(),
-    module_transform.RandomSwapLR()
+    module_transform.RandomSwapLR(),
+    module_transform.RandomFlipPhase()
 ])
 
 # your device transforms needs to handle with batches
@@ -322,7 +323,7 @@ def predict_samples(engine):
         x = torch.from_numpy(x)
         tb_logger.writer.add_audio('mixture', x.t(), engine.state.epoch)
 
-        xpred = _predict_core(x.to(device)).cpu().clip(-1, 1)
+        xpred = _predict_core(x.to(device)).cpu().float().clip(-1, 1)
 
         if len(targets_idx) > 1:
             xpred = xpred.transpose(1, 2)
