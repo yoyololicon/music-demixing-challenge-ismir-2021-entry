@@ -80,19 +80,11 @@ class Demucs(nn.Module):
 
             decode = [
                 nn.Conv1d(channels, channels * 2, 3, padding=1),
-                nn.GLU(dim=1)
+                nn.GLU(dim=1),
+                nn.ConvTranspose1d(channels, out_channels, kernel_size, stride)
             ]
             if index > 0:
-                decode += [
-                    nn.ConvTranspose1d(
-                        channels, out_channels, kernel_size, stride),
-                    nn.ReLU(inplace=True)
-                ]
-            else:
-                decode.append(
-                    nn.ConvTranspose1d(
-                        channels, out_channels, kernel_size, stride)
-                )
+                decode.append(nn.ReLU(inplace=True))
             self.decoder.insert(0, nn.Sequential(*decode))
             in_channels = channels
             channels *= 2
@@ -129,7 +121,9 @@ class Demucs(nn.Module):
             diff = skip.shape[2] - x.shape[2]
 
             if diff > 0:
-                x = F.pad(x, [0, diff])
+                l_pad = diff // 2
+                r_pad = diff - l_pad
+                x = F.pad(x, [l_pad, r_pad])
             x = x + skip
             x = decode(x)
 
@@ -139,7 +133,9 @@ class Demucs(nn.Module):
         diff = length - x.shape[2]
 
         if diff > 0:
-            x = F.pad(x, [0, diff])
+            l_pad = diff // 2
+            r_pad = diff - l_pad
+            x = F.pad(x, [l_pad, r_pad])
 
         x = x.view(x.size(0), 4, 2, x.size(-1))
         return x
