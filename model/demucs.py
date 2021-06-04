@@ -16,6 +16,26 @@ def rescale_conv(reference):
     return closure
 
 
+class OLAConvTranspose1d(nn.ConvTranspose1d):
+    def __init__(self, in_channels: int, out_channels: int, kernel_size, *args, **kwargs):
+        super().__init__(in_channels, out_channels, kernel_size, *args, **kwargs)
+        self.register_buffer('window', torch.hamming_window(
+            kernel_size, periodic=True))
+
+        name = 'weight'
+        weight = getattr(self, name)
+        del self._parameters[name]
+        self.register_parameter(name + '_raw', nn.Parameter(weight.data))
+
+        def _set_weight(module, inputs):
+            weight = getattr(module, name + '_raw') * getattr(module, 'window')
+            setattr(module, name, weight)
+
+        _set_weight(self, None)
+
+        self.register_forward_pre_hook(_set_weight)
+
+
 class Demucs(nn.Module):
     def __init__(self,
                  channels=64,
@@ -60,11 +80,19 @@ class Demucs(nn.Module):
 
             decode = [
                 nn.Conv1d(channels, channels * 2, 3, padding=1),
-                nn.GLU(dim=1),
-                nn.ConvTranspose1d(channels, out_channels, kernel_size, stride)
+                nn.GLU(dim=1)
             ]
             if index > 0:
-                decode.append(nn.ReLU(inplace=True))
+                decode += [
+                    nn.ConvTranspose1d(
+                        channels, out_channels, kernel_size, stride),
+                    nn.ReLU(inplace=True)
+                ]
+            else:
+                decode.append(
+                    nn.ConvTranspose1d(
+                        channels, out_channels, kernel_size, stride)
+                )
             self.decoder.insert(0, nn.Sequential(*decode))
             in_channels = channels
             channels *= 2
@@ -101,9 +129,7 @@ class Demucs(nn.Module):
             diff = skip.shape[2] - x.shape[2]
 
             if diff > 0:
-                l_pad = diff // 2
-                r_pad = diff - l_pad
-                x = F.pad(x, [l_pad, r_pad])
+                x = F.pad(x, [0, diff])
             x = x + skip
             x = decode(x)
 
@@ -113,19 +139,17 @@ class Demucs(nn.Module):
         diff = length - x.shape[2]
 
         if diff > 0:
-            l_pad = diff // 2
-            r_pad = diff - l_pad
-            x = F.pad(x, [l_pad, r_pad])
+            x = F.pad(x, [0, diff])
 
         x = x.view(x.size(0), 4, 2, x.size(-1))
         return x
 
 
 if __name__ == "__main__":
-    net = Demucs().cuda()
+    net = Demucs(channels=32)  # .cuda()
     # net = torch.jit.script(net)
     print(net)
     print(sum(p.numel() for p in net.parameters() if p.requires_grad))
-    x = torch.rand(1, 2, 44100 * 6).cuda()
+    x = torch.rand(1, 2, 44100 * 2)  # .cuda()
     y = net(x)
     print(y.shape)
