@@ -41,16 +41,6 @@ class X_UMX(nn.Module):
         else:
             n_pre_in = 1  # four feature maps are averaged
 
-        if vq_position:
-            assert vq_position in ['pre_lstm', 'post_lstm']
-            self.codebook = nn.Embedding(n_code, latent_dim)
-            nn.init.xavier_uniform_(self.codebook.weight) 
-            if latent_dim != hidden_channels:
-                self.projection = nn.Linear(hidden_channels, latent_dim)
-                self.de_projection = nn.Linear(latent_dim, hidden_channels)
-            else:
-                self.projection = nn.Identity()
-                self.de_projection = nn.Identity()
         self.vq_position = vq_position
 
         self.input_means = nn.Parameter(torch.zeros(4 * self.max_bins))
@@ -107,6 +97,23 @@ class X_UMX(nn.Module):
             nn.BatchNorm1d(nb_channels * self.nb_output_bins * 4),
         )
 
+        if vq_position:
+            assert vq_position in ['pre_lstm', 'post_lstm']
+            self.codebook = nn.Embedding(n_code, latent_dim)
+            nn.init.xavier_uniform_(self.codebook.weight) 
+            
+        if vq_position == 'pre_lstm':
+            pre_q_dim = hidden_channels
+        else:
+            pre_q_dim = hidden_channels * n_post_in
+
+        if latent_dim != pre_q_dim:
+            self.projection = nn.Linear(pre_q_dim, latent_dim)
+            self.de_projection = nn.Linear(latent_dim, pre_q_dim)
+        else:
+            self.projection = nn.Identity()
+            self.de_projection = nn.Identity()
+
     def forward(self, spec: torch.Tensor):
         batch, channels, bins, frames = spec.shape
         spec = spec[..., :self.max_bins, :]
@@ -114,7 +121,7 @@ class X_UMX(nn.Module):
         x = (spec.unsqueeze(1) + self.input_means.view(4, 1, -1, 1)) * \
             self.input_scale.view(4, 1, -1, 1)
 
-        x = x.view(batch, -1, frames)
+        x = x.view(batch, -1, frames)  # same shape as cross_2
         cross_1 = self.affine1(x).view(batch, 4, -1, frames).mean(1)
 
         if self.vq_position == 'pre_lstm':
@@ -123,8 +130,6 @@ class X_UMX(nn.Module):
             code_usage = get_code_usage(self.codebook, indices)
             e_post_q = self.de_projection(q)
             cross_1 = e_post_q.view(batch, -1, frames)
-        elif self.vq_position == 'post_lstm':
-            raise NotImplementedError
 
         cross_1 = cross_1.permute(2, 0, 1)
         bass, *_ = self.bass_lstm(cross_1)
@@ -138,6 +143,13 @@ class X_UMX(nn.Module):
             post_in = (bass + drums + vocals + others) * 0.25
         cross_2 = torch.cat([cross_1, post_in], 2).permute(1, 2, 0)
 
+        if self.vq_position == 'post_lstm':
+            e = self.projection(cross_2.reshape(batch, frames, -1))
+            q, indices = quantize(e, self.codebook.weight)
+            code_usage = get_code_usage(self.codebook, indices)
+            e_post_q = self.de_projection(q)
+            cross_2 = e_post_q.view(batch, -1, frames)
+
         mask = self.affine2(cross_2).view(batch, 4, channels, bins, frames) * \
             self.output_scale.view(4, 1, -1, 1) + \
             self.output_means.view(4, 1, -1, 1)
@@ -148,6 +160,9 @@ if __name__ == "__main__":
     net = X_UMX(max_bins=2000)
     net_vq = X_UMX(max_bins=2000, vq_position='pre_lstm')
     net_no_post_avg = X_UMX(max_bins=2000, post_avg=False)
+    net_vq_no_post_avg = X_UMX(
+        max_bins=2000, post_avg=False, vq_position='post_lstm'
+    )
 
     spec = torch.rand(1, 2, 2049, 10)
 
@@ -157,8 +172,11 @@ if __name__ == "__main__":
     y_vq = net_vq(spec)
     print(y_vq.shape)
 
-    y_np = net_no_post_avg(spec)
-    print(y_np.shape)
+    y_npa = net_no_post_avg(spec)
+    print(y_npa.shape)
+
+    y_vq_npa = net_vq_no_post_avg(spec)
+    print(y_vq_npa.shape)
 
     # x = torch.randn(8, 44100)
     # print(net.t2f(x).shape)
