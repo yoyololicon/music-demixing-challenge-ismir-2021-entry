@@ -16,6 +16,8 @@ class X_UMX(nn.Module):
         max_bins=None,
         nb_channels=2,
         nb_layers=3,
+        pre_avg=True,
+        post_avg=True,
         vq_position=None,
         latent_dim=256,
         n_code=2048
@@ -31,6 +33,13 @@ class X_UMX(nn.Module):
         self.n_fft = n_fft
         self.nb_channels = nb_channels
         self.nb_layers = nb_layers
+        self.pre_avg = pre_avg
+        self.post_avg = post_avg
+
+        if not pre_avg:
+            raise NotImplementedError
+        else:
+            n_pre_in = 1  # four feature maps are averaged
 
         if vq_position:
             assert vq_position in ['pre_lstm', 'post_lstm']
@@ -81,8 +90,15 @@ class X_UMX(nn.Module):
             dropout=0.4,
             bidirectional=True)
 
+        if not post_avg:
+            # four sources and skip connected inputs
+            n_post_in = 4 + n_pre_in
+        else:
+            # averaged output feature maps and skip connected inputs
+            n_post_in = 1 + n_pre_in  
+
         self.affine2 = nn.Sequential(
-            nn.Conv1d(hidden_channels * 2,
+            nn.Conv1d(hidden_channels * n_post_in,
                       hidden_channels * 4, 1, bias=False),
             nn.BatchNorm1d(hidden_channels * 4),
             nn.ReLU(inplace=True),
@@ -116,8 +132,11 @@ class X_UMX(nn.Module):
         others, *_ = self.other_lstm(cross_1)
         vocals, *_ = self.vocals_lstm(cross_1)
 
-        avg = (bass + drums + vocals + others) * 0.25
-        cross_2 = torch.cat([cross_1, avg], 2).permute(1, 2, 0)
+        if not self.post_avg:
+            post_in = torch.cat([bass, drums, vocals, others], 2)
+        else:
+            post_in = (bass + drums + vocals + others) * 0.25
+        cross_2 = torch.cat([cross_1, post_in], 2).permute(1, 2, 0)
 
         mask = self.affine2(cross_2).view(batch, 4, channels, bins, frames) * \
             self.output_scale.view(4, 1, -1, 1) + \
@@ -128,6 +147,7 @@ class X_UMX(nn.Module):
 if __name__ == "__main__":
     net = X_UMX(max_bins=2000)
     net_vq = X_UMX(max_bins=2000, vq_position='pre_lstm')
+    net_no_post_avg = X_UMX(max_bins=2000, post_avg=False)
 
     spec = torch.rand(1, 2, 2049, 10)
 
@@ -136,6 +156,9 @@ if __name__ == "__main__":
 
     y_vq = net_vq(spec)
     print(y_vq.shape)
+
+    y_np = net_no_post_avg(spec)
+    print(y_np.shape)
 
     # x = torch.randn(8, 44100)
     # print(net.t2f(x).shape)

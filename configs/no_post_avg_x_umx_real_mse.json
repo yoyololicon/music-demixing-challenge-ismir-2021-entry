@@ -1,0 +1,103 @@
+{
+    "name": "no post avg CrossNet Open-Unmix",
+    "arch": {
+        "type": "X_UMX",
+        "args": {
+            "n_fft": 4096,
+            "hidden_channels": 512,
+            "max_bins": 1487,
+            "nb_channels": 2,
+            "nb_layers": 3,
+            "post_avg": false
+        }
+    },
+    "dataset": {
+        "train": {
+            "type": "FastMUSDB",
+            "args": {
+                "root": "/data/Demix/",
+                "subsets": "train",
+                "split": null,
+                "seq_duration": 6.0,
+                "samples_per_track": 64,
+                "random": true,
+                "random_track_mix": true
+            }
+        },
+        "valid": {
+            "type": "FastMUSDB",
+            "args": {
+                "root": "/data/Demix/",
+                "subsets": "test",
+                "split": null,
+                "seq_duration": 6.0
+            }
+        }
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args": {
+            "lr": 1e-4,
+            "weight_decay": 1e-5
+        }
+    },
+    "loss": {
+        "type": "CLoss",
+        "args": {
+            "mcoeff": 10,
+            "n_fft": 4096,
+            "hop_length": 1024,
+	    "complex_mse": false
+        }
+    },
+    "lr_scheduler": {
+        "type": "ReduceLROnPlateau",
+        "args": {
+            "factor": 0.3,
+            "patience": 80,
+            "verbose": true
+        }
+    },
+    "data_loader": {
+        "train": {
+            "batch_size": 4,
+            "shuffle": true,
+            "drop_last": true,
+            "num_workers": 0,
+            "pin_memory": true
+        },
+        "valid": {
+            "batch_size": 4,
+            "num_workers": 0,
+            "pin_memory": true
+        }
+    },
+    "trainer": {
+        "epochs": 100,
+        "save_dir": "saved/",
+        "log_dir": "runs/",
+        "cum_steps": 1,
+        "patience": 1000,
+        "amp_enabled": false,
+        "val_epoch_length": null,
+        "validate_every": 1,
+        "targets": [
+            "bass",
+            "drums",
+            "vocals",
+            "other"
+        ],
+        "n_fft": 4096,
+        "hop_length": 1024,
+        "extra_monitor": [
+            "loss_f",
+            "loss_t"
+        ]
+    },
+    "MWF": {
+        "residual_model": false,
+        "softmask": false,
+        "alpha": 1.0,
+        "n_iter": 1
+    }
+}
