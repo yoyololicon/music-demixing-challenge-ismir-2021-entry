@@ -16,8 +16,8 @@ class X_UMX(nn.Module):
         max_bins=None,
         nb_channels=2,
         nb_layers=3,
-        pre_avg=True,
-        post_avg=True,
+        pre_aggregate='avg',
+        post_aggregate='avg',
         vq_position=None,
         latent_dim=256,
         n_code=2048
@@ -33,10 +33,10 @@ class X_UMX(nn.Module):
         self.n_fft = n_fft
         self.nb_channels = nb_channels
         self.nb_layers = nb_layers
-        self.pre_avg = pre_avg
-        self.post_avg = post_avg
+        self.pre_aggregate = pre_aggregate
+        self.post_aggregate = post_aggregate
 
-        if not pre_avg:
+        if pre_aggregate != 'avg':
             raise NotImplementedError
         else:
             n_pre_in = 1  # four feature maps are averaged
@@ -80,12 +80,14 @@ class X_UMX(nn.Module):
             dropout=0.4,
             bidirectional=True)
 
-        if not post_avg:
+        if post_aggregate == 'concat':
             # four sources and skip connected inputs
             n_post_in = 4 + n_pre_in
-        else:
+        elif post_aggregate == 'avg':
             # averaged output feature maps and skip connected inputs
             n_post_in = 1 + n_pre_in  
+        else:
+            raise NotImplementedError
 
         self.affine2 = nn.Sequential(
             nn.Conv1d(hidden_channels * n_post_in,
@@ -98,21 +100,22 @@ class X_UMX(nn.Module):
         )
 
         if vq_position:
-            assert vq_position in ['pre_lstm', 'post_lstm']
+            assert vq_position in ['pre_lstm', 'post_lstm', 'post_lstm_i']
             self.codebook = nn.Embedding(n_code, latent_dim)
             nn.init.xavier_uniform_(self.codebook.weight) 
             
-        if vq_position == 'pre_lstm':
+        if vq_position == 'pre_lstm' or vq_position == 'post_lstm_i':
             pre_q_dim = hidden_channels
-        else:
+        elif vq_position == 'post_lstm':
             pre_q_dim = hidden_channels * n_post_in
 
-        if latent_dim != pre_q_dim:
-            self.projection = nn.Linear(pre_q_dim, latent_dim)
-            self.de_projection = nn.Linear(latent_dim, pre_q_dim)
-        else:
-            self.projection = nn.Identity()
-            self.de_projection = nn.Identity()
+        if vq_position:
+            if latent_dim != pre_q_dim:
+                self.projection = nn.Linear(pre_q_dim, latent_dim)
+                self.de_projection = nn.Linear(latent_dim, pre_q_dim)
+            else:
+                self.projection = nn.Identity()
+                self.de_projection = nn.Identity()
 
     def forward(self, spec: torch.Tensor):
         batch, channels, bins, frames = spec.shape
@@ -125,11 +128,8 @@ class X_UMX(nn.Module):
         cross_1 = self.affine1(x).view(batch, 4, -1, frames).mean(1)
 
         if self.vq_position == 'pre_lstm':
-            e = self.projection(cross_1.view(batch, frames, -1))
-            q, indices = quantize(e, self.codebook.weight)
-            code_usage = get_code_usage(self.codebook, indices)
-            e_post_q = self.de_projection(q)
-            cross_1 = e_post_q.view(batch, -1, frames)
+            c = self.project_and_quantize(cross_1.view(batch, frames, -1))
+            cross_1 = c.view(batch, -1, frames)
 
         cross_1 = cross_1.permute(2, 0, 1)
         bass, *_ = self.bass_lstm(cross_1)
@@ -137,31 +137,49 @@ class X_UMX(nn.Module):
         others, *_ = self.other_lstm(cross_1)
         vocals, *_ = self.vocals_lstm(cross_1)
 
-        if not self.post_avg:
+        if self.vq_position == 'post_lstm_i':
+            c_b = self.project_and_quantize(bass.reshape(batch, frames, -1))
+            c_d = self.project_and_quantize(drums.reshape(batch, frames, -1))
+            c_o = self.project_and_quantize(others.reshape(batch, frames, -1))
+            c_v = self.project_and_quantize(vocals.reshape(batch, frames, -1))
+            bass = c_b.view(frames, batch, -1)
+            drums = c_d.view(frames, batch, -1)
+            others = c_o.view(frames, batch, -1)
+            vocals = c_v.view(frames, batch, -1)
+
+        if self.post_aggregate == 'concat':
+            # TODO: does the concat order matters?
             post_in = torch.cat([bass, drums, vocals, others], 2)
-        else:
+        elif self.post_aggregate == 'avg':
             post_in = (bass + drums + vocals + others) * 0.25
+            
         cross_2 = torch.cat([cross_1, post_in], 2).permute(1, 2, 0)
 
         if self.vq_position == 'post_lstm':
-            e = self.projection(cross_2.reshape(batch, frames, -1))
-            q, indices = quantize(e, self.codebook.weight)
-            code_usage = get_code_usage(self.codebook, indices)
-            e_post_q = self.de_projection(q)
-            cross_2 = e_post_q.view(batch, -1, frames)
+            c = self.project_and_quantize(cross_2.reshape(batch, frames, -1))
+            cross_2 = c.view(batch, -1, frames)
 
         mask = self.affine2(cross_2).view(batch, 4, channels, bins, frames) * \
             self.output_scale.view(4, 1, -1, 1) + \
             self.output_means.view(4, 1, -1, 1)
         return mask.relu()
+    
+    def project_and_quantize(self, input):
+        e = self.projection(input)
+        q, indices = quantize(e, self.codebook.weight)
+        code_usage = get_code_usage(self.codebook, indices)
+        return self.de_projection(q)
 
 
 if __name__ == "__main__":
     net = X_UMX(max_bins=2000)
-    net_vq = X_UMX(max_bins=2000, vq_position='pre_lstm')
-    net_no_post_avg = X_UMX(max_bins=2000, post_avg=False)
-    net_vq_no_post_avg = X_UMX(
-        max_bins=2000, post_avg=False, vq_position='post_lstm'
+    net_pre_vq = X_UMX(max_bins=2000, vq_position='pre_lstm')
+    net_post_concat = X_UMX(max_bins=2000, post_aggregate='concat')
+    net_post_concat_post_vq = X_UMX(
+        max_bins=2000, post_aggregate='concat', vq_position='post_lstm'
+    )
+    net_post_concat_post_i_vq = X_UMX(
+        max_bins=2000, post_aggregate='concat', vq_position='post_lstm_i'
     )
 
     spec = torch.rand(1, 2, 2049, 10)
@@ -169,14 +187,17 @@ if __name__ == "__main__":
     y = net(spec)
     print(y.shape)
 
-    y_vq = net_vq(spec)
-    print(y_vq.shape)
+    y_pre_vq = net_pre_vq(spec)
+    print(y_pre_vq.shape)
 
-    y_npa = net_no_post_avg(spec)
-    print(y_npa.shape)
+    y_post_concat = net_post_concat(spec)
+    print(y_post_concat.shape)
+    
+    y_post_concat_post_vq = net_post_concat_post_vq(spec)
+    print(y_post_concat_post_vq.shape)
 
-    y_vq_npa = net_vq_no_post_avg(spec)
-    print(y_vq_npa.shape)
+    y_post_concat_post_i_vq = net_post_concat_post_i_vq(spec)
+    print(y_post_concat_post_i_vq.shape)
 
     # x = torch.randn(8, 44100)
     # print(net.t2f(x).shape)
