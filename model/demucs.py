@@ -143,6 +143,8 @@ class Demucs(nn.Module):
 
 
 class MultiResBlock(nn.Module):
+    __constants__ = ['base']
+
     base: int = 2
 
     def __init__(self, in_channels, out_channels, kernel_size, stride, scales=3):
@@ -172,9 +174,11 @@ class MultiResBlock(nn.Module):
             out.append(layer(x))
 
         length = out[0].shape[2]
+        base = 1
         for i in range(1, len(out)):
+            base *= self.base
             y = out[i]
-            y = y.repeat_interleave(self.base ** i, dim=2)
+            y = y.repeat_interleave(base, dim=2)
             diff = length - y.shape[2]
             if diff > 0:
                 l_pad = diff // 2
