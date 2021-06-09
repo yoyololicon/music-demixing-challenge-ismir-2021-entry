@@ -163,7 +163,7 @@ class DemucsSplit(nn.Module):
             self.down_sample = julius.ResampleFrac(2, 1)
 
         self.encoder = nn.ModuleList()
-        self.enc_pre_convs = nn.ModuleList()
+        self.convs_1x1 = nn.ModuleList()
         self.dec_pre_convs = nn.ModuleList()
         self.decoder = nn.ModuleList()
 
@@ -181,16 +181,18 @@ class DemucsSplit(nn.Module):
             )
 
             decode = []
+            if index > 0:
+                out_channels = in_channels * 2
+            else:
+                out_channels = 8
 
-            out_channels = in_channels
-
-            self.enc_pre_convs.insert(0,
-                                      nn.Conv1d(channels, channels * 8, 3, padding=1, bias=False))
+            self.convs_1x1.insert(0,
+                                  nn.Conv1d(channels, channels * 4, 3, padding=1, bias=False))
             self.dec_pre_convs.insert(0,
-                                      nn.Conv1d(channels, channels * 2, 3, padding=1))
+                                      nn.Conv1d(channels * 2, channels * 4, 3, padding=1, groups=4))
             decode = [
-                nn.GLU(dim=1),
-                nn.ConvTranspose1d(channels, out_channels, kernel_size, stride)
+                nn.ConvTranspose1d(channels * 2, out_channels,
+                                   kernel_size, stride, groups=4)
             ]
             if index > 0:
                 decode.append(nn.ReLU(inplace=True))
@@ -206,7 +208,7 @@ class DemucsSplit(nn.Module):
             num_layers=lstm_layers,
             dropout=0,
             bidirectional=True)
-        self.lstm_linear = nn.Linear(channels * 2, channels * 4)
+        self.lstm_linear = nn.Linear(channels * 2, channels * 2)
 
         self.apply(rescale_conv(reference=rescale))
 
@@ -225,9 +227,7 @@ class DemucsSplit(nn.Module):
         x = self.lstm(x)[0]
         x = self.lstm_linear(x).permute(1, 2, 0)
 
-        x = x.reshape(x.shape[0] * 4, -1, x.shape[2])
-
-        for decode, pre_dec, pre_enc in zip(self.decoder, self.dec_pre_convs, self.enc_pre_convs):
+        for decode, pre_dec, conv1x1 in zip(self.decoder, self.dec_pre_convs, self.convs_1x1):
             skip = saved.pop()
             diff = skip.shape[2] - x.shape[2]
 
@@ -236,10 +236,10 @@ class DemucsSplit(nn.Module):
                 r_pad = diff - l_pad
                 x = F.pad(x, [l_pad, r_pad])
 
-            x = pre_dec(x).view(x.shape[0] // 4, 4, -1, x.shape[2]) + \
-                pre_enc(skip).view(skip.shape[0], 4, -1, skip.shape[2])
-
-            x = decode(x.view(x.shape[0] * 4, -1, x.shape[3]))
+            x = pre_dec(x) + conv1x1(skip)
+            a, b = x.view(x.shape[0], 4, -1, x.shape[2]).chunk(2, 2)
+            x = a * b.sigmoid()
+            x = decode(x.view(x.shape[0], -1, x.shape[3]))
 
         if hasattr(self, 'down_sample'):
             x = self.down_sample(x)
@@ -503,11 +503,10 @@ class Demucs2(nn.Module):
 
 
 if __name__ == "__main__":
-    net = DemucsSplit(channels=32)  # .cuda()
+    from torchinfo import summary
+    net = Demucs(channels=32)  # .cuda()
     # net = D2ResBlock(2, 32, 8, 4, scales=3)
     # net = torch.jit.script(net)
-    print(net)
-    print(sum(p.numel() for p in net.parameters() if p.requires_grad))
+    # print(sum(p.numel() for p in net.parameters() if p.requires_grad))
     x = torch.rand(1, 2, 44100 * 2)  # .cuda()
-    y = net(x)
-    print(y.shape)
+    summary(net)
