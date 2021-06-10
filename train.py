@@ -52,7 +52,10 @@ cpu_trsfm = Compose([
 ])
 
 # your device transforms needs to handle with batches
-device_trsfm = nn.Sequential().to(device)
+device_trsfm = nn.Sequential(
+    module_transform.RandomPitch(),
+    module_transform.SpeedPerturb()
+).to(device)
 
 train_data = get_instance(
     module_data, config['dataset']['train'], transform=cpu_trsfm)
