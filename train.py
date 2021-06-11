@@ -50,7 +50,10 @@ cpu_trsfm = Compose([
 ])
 
 # your device transforms needs to handle with batches
-device_trsfm = nn.Sequential().to(device)
+device_trsfm = nn.Sequential(
+    module_transform.RandomPitch(),
+    module_transform.SpeedPerturb()
+).to(device)
 
 train_data = get_instance(
     module_data, config['dataset']['train'], transform=cpu_trsfm)
@@ -335,11 +338,12 @@ def predict_samples(engine):
                 val_data.sources[targets_idx[0]], xpred, engine.state.epoch)
 
 
-trainer.add_event_handler(Events.EPOCH_COMPLETED, predict_samples)
+trainer.add_event_handler(Events.EPOCH_COMPLETED(
+    every=validate_every), predict_samples)
 
 
 if args.checkpoint:
-    checkpoint = torch.load(args.checkpoint)
+    checkpoint = torch.load(args.checkpoint, map_location='cpu')
     Checkpoint.load_objects(to_load=to_save, checkpoint=checkpoint)
 
 if args.weights:
