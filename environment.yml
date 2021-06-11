@@ -19,4 +19,5 @@ dependencies:
   - pip:
     - torch-optimizer
     - musdb
+    - torchinfo
     - git+https://github.com/yoyololicon/norbert@batch-support
