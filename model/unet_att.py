@@ -139,8 +139,7 @@ class MultiHeadAttention(nn.Module):
                 == 0).to(unfold_k.dtype) * -1e-9
 
         logits = unfold_q @ unfold_k + bias
-        with torch.cuda.amp.autocast(enabled=False):
-            weights = logits.float().softmax(-1)
+        weights = logits.softmax(-1)
         out = weights @ unfold_v
 
         out = out.view(tmp).permute(0, 1, 5, 3, 2, 4)
@@ -242,20 +241,18 @@ class UNetAttn(nn.Module):
                               0, sk.shape[2] - x.shape[2]])
             x = torch.cat([x, sk], 1)
             i -= 1
-        x = self.end(x)
-        with torch.cuda.amp.autocast(enabled=False):
-            x = x.float().sigmoid()
-  
+        x = self.end(x).sigmoid()
+
         x = F.pad(x, [0, spec.shape[3] - x.shape[3], 0,
                       spec.shape[2] - x.shape[2]], value=0.25)
-        x = x.view(x.shape[0], 4, 2, x.shape[2], x.shape[3])  
- 
+        x = x.view(x.shape[0], 4, 2, x.shape[2], x.shape[3])
+
         return x
 
 
 if __name__ == "__main__":
     net = UNetAttn()
-    # net = torch.jit.script(net)
+    net = torch.jit.script(net)
     print(net)
     print(sum(p.numel() for p in net.parameters()
               if p.requires_grad), net.conv_n_filters)

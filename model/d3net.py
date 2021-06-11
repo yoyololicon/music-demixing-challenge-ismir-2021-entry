@@ -10,6 +10,18 @@ class _Base(nn.Module):
 
 
 class D2_block(_Base):
+    __constants__ = [
+        'in_channels',
+        'k',
+        'L',
+        'last_N',
+    ]
+
+    in_channels: int
+    k: int
+    L: int
+    last_N: int
+
     def __init__(self,
                  in_channels,
                  k,
@@ -50,13 +62,17 @@ class D2_block(_Base):
     def forward(self, input: torch.Tensor):
         # the input should be already BN + ReLU before
         outputs = []
-        skips = [0] * self.L
-        for i in range(self.L):
-            input, * \
-                tmp = self.conv_layers[i](input).chunk(self.L - i, 1)
-            input = input + skips.pop(0)
-            skips = [s + t for s, t in zip(skips, tmp)]
-            input = self.bn_layers[i](input)
+        skips = []
+        for i, (conv, bn) in enumerate(zip(self.conv_layers, self.bn_layers)):
+            tmp = conv(input).chunk(self.L - i, 1)
+            input = tmp[0]
+            tmp = tmp[1:]
+            if i > 0:
+                input = input + skips.pop(0)
+                skips = [s + t for s, t in zip(skips, tmp)]
+            else:
+                skips = list(tmp)
+            input = bn(input)
             outputs.append(input)
 
         assert len(skips) == 0
@@ -156,7 +172,7 @@ class UNet(_Base):
 
         for layer, ts, sk in zip(self.up_layers, self.tas_layers, skips[::-1]):
             x = ts(x)
-            #x = x.repeat_interleave(2, 2).repeat_interleave(2, 3)
+            # x = x.repeat_interleave(2, 2).repeat_interleave(2, 3)
             x = F.conv_transpose2d(x, self.tas_kernel.expand(
                 x.shape[1], -1, -1, -1), stride=2, groups=x.shape[1])
             x = layer(torch.cat([x[..., :sk.shape[2], :sk.shape[3]], sk], 1))
@@ -274,13 +290,13 @@ def get_vocals_model(last_n_layers=1):
 if __name__ == "__main__":
     m = get_vocals_model().cuda()  # .half()
     # print(m)
-    #torch.save(m, 'model_size_test.pth')
+    # torch.save(m, 'model_size_test.pth')
     x = torch.rand(1, 2, 2049, 256).cuda()  # .half()
     y = m(x)
     print(y.shape)
     exit(0)
     # m = D2_block(32, 6, 4, 4)
-    #m = D3_block(32, 2, k=13, L=5)
+    # m = D3_block(32, 2, k=13, L=5)
     m = UNet(
         32,
         [
