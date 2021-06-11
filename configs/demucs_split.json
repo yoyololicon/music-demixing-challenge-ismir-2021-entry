@@ -43,7 +43,7 @@
         "type": "ReduceLROnPlateau",
         "args": {
             "factor": 0.3,
-            "patience": 500,
+            "patience": 1800,
             "verbose": true
         }
     },
@@ -53,13 +53,13 @@
             "shuffle": true,
             "drop_last": true,
             "num_workers": 2,
-            "prefetch_factor": 6,
+            "prefetch_factor": 4,
             "pin_memory": true
         },
         "valid": {
             "batch_size": 4,
             "num_workers": 2,
-            "prefetch_factor": 6,
+            "prefetch_factor": 4,
             "pin_memory": true
         }
     },

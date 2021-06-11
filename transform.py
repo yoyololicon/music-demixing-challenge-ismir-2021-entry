@@ -6,7 +6,6 @@ from julius import ResampleFrac
 import random
 from model import Spec
 from torchaudio.transforms import TimeStretch
-from torchaudio.functional import phase_vocoder
 
 
 class RandomSwapLR(object):

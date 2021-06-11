@@ -344,11 +344,12 @@ def predict_samples(engine):
                 val_data.sources[targets_idx[0]], xpred, engine.state.epoch)
 
 
-trainer.add_event_handler(Events.EPOCH_COMPLETED, predict_samples)
+trainer.add_event_handler(Events.EPOCH_COMPLETED(
+    every=validate_every), predict_samples)
 
 
 if args.checkpoint:
-    checkpoint = torch.load(args.checkpoint)
+    checkpoint = torch.load(args.checkpoint, map_location='cpu')
     Checkpoint.load_objects(to_load=to_save, checkpoint=checkpoint)
 
 if args.weights:
