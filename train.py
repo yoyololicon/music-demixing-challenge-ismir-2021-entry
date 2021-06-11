@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 from torch import optim, nn
 from torch.cuda import amp
 from torchvision.transforms import Compose
+from torchinfo import summary
 import argparse
 import json
 from datetime import datetime
@@ -75,10 +76,6 @@ scheduler = get_instance(optim.lr_scheduler, config['lr_scheduler'], optimizer)
 criterion = get_instance(module_loss, config['loss']).to(device)
 
 sdr = module_loss.SDR()
-
-
-print('Trainable parameters: {}'.format(sum(p.numel()
-                                            for p in model.parameters() if p.requires_grad)))
 
 
 model_name = config['name']
@@ -263,10 +260,18 @@ tb_logger.attach_opt_params_handler(
 )
 
 # add model graph
+# use torchinfo
 test_input = torch.from_numpy(val_data[0][0]).to(device).unsqueeze(0)
 if not time_domain:
     test_input = spec(test_input).abs()
-tb_logger.writer.add_graph(model, input_to_model=test_input)
+summary(model,
+        input_data=test_input,
+        device=device,
+        col_names=("input_size", "output_size", "num_params", "kernel_size",
+                   "mult_adds"),
+        col_width=16,
+        row_settings=("depth", "var_names"))
+# tb_logger.writer.add_graph(model, input_to_model=test_input)
 
 # early stop
 
