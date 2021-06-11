@@ -64,14 +64,14 @@
         }
     },
     "trainer": {
-        "epochs": 500,
+        "epochs": 1800,
         "save_dir": "saved/",
         "log_dir": "runs/",
         "cum_steps": 15,
         "patience": 1000,
         "amp_enabled": true,
         "val_epoch_length": null,
-        "validate_every": 1,
+        "validate_every": 5,
         "targets": [
             "bass",
             "drums",
