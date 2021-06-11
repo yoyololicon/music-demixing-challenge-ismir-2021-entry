@@ -128,9 +128,6 @@
                     "items": {
                         "type": "string"
                     }
-                },
-                "time_domain": {
-                    "type": "boolean"
                 }
             },
             "required": [
@@ -143,6 +140,8 @@
                 "val_epoch_length",
                 "validate_every",
                 "targets",
+                "n_fft",
+                "hop_length",
                 "extra_monitor"
             ]
         }

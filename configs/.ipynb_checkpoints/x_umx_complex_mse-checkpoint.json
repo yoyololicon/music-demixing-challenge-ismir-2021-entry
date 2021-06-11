@@ -1,20 +1,24 @@
 {
-    "name": "UNet Attention",
+    "name": "CrossNet Open-Unmix",
     "arch": {
-        "type": "UNetAttn",
+        "type": "X_UMX",
         "args": {
-            "max_bins": 1487
+            "n_fft": 4096,
+            "hidden_channels": 512,
+            "max_bins": 1487,
+            "nb_channels": 2,
+            "nb_layers": 3
         }
     },
     "dataset": {
         "train": {
             "type": "FastMUSDB",
             "args": {
-                "root": "../Demix/",
+                "root": "~/Datasets/musdb18hq/",
                 "subsets": "train",
                 "split": null,
-                "seq_duration": 11.88,
-                "samples_per_track": 32,
+                "seq_duration": 6.0,
+                "samples_per_track": 64,
                 "random": true,
                 "random_track_mix": true
             }
@@ -22,17 +26,18 @@
         "valid": {
             "type": "FastMUSDB",
             "args": {
-                "root": "../Demix/",
+                "root": "~/Datasets/musdb18hq/",
                 "subsets": "test",
                 "split": null,
-                "seq_duration": 11.88
+                "seq_duration": 6.0
             }
         }
     },
     "optimizer": {
         "type": "Adam",
         "args": {
-            "lr": 2e-4
+            "lr": 1e-4,
+            "weight_decay": 1e-5
         }
     },
     "loss": {
@@ -53,31 +58,34 @@
     },
     "data_loader": {
         "train": {
-            "batch_size": 16,
+            "batch_size": 4,
             "shuffle": true,
             "drop_last": true,
-            "num_workers": 4,
-            "prefetch_factor": 2,
+            "num_workers": 2,
+            "prefetch_factor": 4,
             "pin_memory": true
         },
         "valid": {
             "batch_size": 4,
-            "num_workers": 4,
-            "prefetch_factor": 8,
+            "num_workers": 2,
+            "prefetch_factor": 4,
             "pin_memory": true
         }
     },
     "trainer": {
-        "epochs": 1000,
-        "save_dir": "saved/Full_batch=16-4GPU-syncbatchnorm",
-        "log_dir": "runs/Full_batch=16-4GPU-syncbatchnorm",
+        "epochs": 100,
+        "save_dir": "saved/",
+        "log_dir": "runs/",
         "cum_steps": 1,
         "patience": 1000,
         "amp_enabled": false,
         "val_epoch_length": null,
         "validate_every": 1,
         "targets": [
-            "vocals", "drums", "bass", "other"
+            "bass",
+            "drums",
+            "vocals",
+            "other"
         ],
         "n_fft": 4096,
         "hop_length": 1024,
@@ -90,6 +98,6 @@
         "residual_model": false,
         "softmask": false,
         "alpha": 1.0,
-        "n_iter": 0
+        "n_iter": 1
     }
 }

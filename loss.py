@@ -5,31 +5,8 @@ from itertools import combinations, chain
 from utils import MWF
 
 
-class _TLoss(torch.nn.Module):
-    r"""Base class for time domain loss modules.
-
-    You can't use this module directly.
-    Your loss should also subclass this class.
-
-    Args:
-        pred (Tensor): predict time signal tensor with size (batch, *, channels, samples), `*` is an optional multi targets dimension.
-        gt (Tensor): target time signal tensor with size (batch, *, channels, samples), `*` is an optional multi targets dimension.
-        mix (Tensor): mixture time signal tensor with size (batch, channels, samples)
-
-    Returns:
-        tuple: a length-2 tuple with the first element is the final loss tensor, 
-            and the second is a dict containing any intermediate loss value you want to monitor
-    """
-
-    def forward(self, *args, **kwargs):
-        return self._core_loss(*args, **kwargs)
-
-    def _core_loss(self, pred, gt, mix):
-        raise NotImplementedError
-
-
-class _FLoss(torch.nn.Module):
-    r"""Base class for frequency domain loss modules.
+class _Loss(torch.nn.Module):
+    r"""Base class for all loss modules.
 
     You can't use this module directly.
     Your loss should also subclass this class.
@@ -88,7 +65,7 @@ class WaveGlowLoss(torch.nn.Module):
         return loss, {}
 
 
-class CLoss(_FLoss):
+class CLoss(_Loss):
     def __init__(self, mcoeff=10, n_fft=4096, hop_length=1024, complex_mse=True, **mwf_kwargs):
         super().__init__()
         self.mcoeff = mcoeff
@@ -115,13 +92,13 @@ class CLoss(_FLoss):
         }
 
 
-class MDLoss(_FLoss):
+class MDLoss(torch.nn.Module):
     def __init__(self, mcoeff=10, n_fft=4096, hop_length=1024):
         super().__init__()
         self.mcoeff = mcoeff
         self.spec = Spec(n_fft, hop_length)
 
-    def _core_loss(self, msk_hat, gt_spec, mix_spec, gt, mix):
+    def forward(self, msk_hat, gt_spec, mix_spec, gt, mix):
         pred_spec = msk_hat * mix_spec
         diff = pred_spec - gt_spec
 
