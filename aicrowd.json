@@ -1,0 +1,9 @@
+{
+  "challenge_id": "evaluations-api-music-demixing",
+  "grader_id": "evaluations-api-music-demixing",
+  "authors": [
+    "yoyololicon"
+  ],
+  "description": "Open-Unmix Separation model with complex mse loss and MWF training",
+  "external_dataset_used": false
+}
