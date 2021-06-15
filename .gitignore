@@ -1,0 +1,4 @@
+runs/*
+*.pyc
+.vscode/settings.json
+*.pt
