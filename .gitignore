@@ -1,0 +1,6 @@
+.vscode/settings.json
+*.pyc
+estimates/
+*tfevents.*
+saved/
+waveflow_saved/
