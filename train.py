@@ -32,6 +32,8 @@ parser.add_argument('--checkpoint', type=str, default=None,
                     help='training checkpoint')
 parser.add_argument('--weights', type=str, default=None,
                     help='initial model weights')
+parser.add_argument('-d', '--device', default=0, type=int, help='cuda device number')
+parser.add_argument('--device_ids',  default=None, type=int, nargs='+',  help='indices of GPUs for DataParallel (default: None)')
 
 args = parser.parse_args()
 
@@ -39,8 +41,8 @@ config = json.load(open(args.config))
 validate(config, schema=CONFIG_SCHEMA)
 
 if torch.cuda.is_available():
-    device = f"cuda:{config['device']}"
-    device_ids = config['device_ids']
+    device = f"cuda:{args.device}"
+    device_ids = args.device_ids
     torch.backends.cudnn.benchmark = True
 else:
     device = 'cpu'
