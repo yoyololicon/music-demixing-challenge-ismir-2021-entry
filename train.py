@@ -32,6 +32,8 @@ parser.add_argument('--checkpoint', type=str, default=None,
                     help='training checkpoint')
 parser.add_argument('--weights', type=str, default=None,
                     help='initial model weights')
+parser.add_argument('-d', '--device', default=0, type=int, help='cuda device number')
+parser.add_argument('--device_ids',  default=None, type=int, nargs='+',  help='indices of GPUs for DataParallel (default: None)')
 
 args = parser.parse_args()
 
@@ -39,7 +41,8 @@ config = json.load(open(args.config))
 validate(config, schema=CONFIG_SCHEMA)
 
 if torch.cuda.is_available():
-    device = 'cuda'
+    device = f"cuda:{args.device}"
+    device_ids = args.device_ids
     torch.backends.cudnn.benchmark = True
 else:
     device = 'cpu'
@@ -63,8 +66,22 @@ val_data = get_instance(module_data, config['dataset']['valid'])
 train_loader = DataLoader(train_data, **config['data_loader']['train'])
 val_loader = DataLoader(val_data, **config['data_loader']['valid'])
 
+class MyDataParallel(torch.nn.DataParallel):
+    """
+    Allow nn.DataParallel to call model's attributes.
+    """
+    def __getattr__(self, name):
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self.module, name)
 
 model = get_instance(module_arch, config['arch']).to(device)
+
+if device_ids:
+    print(f'using multi-GPU')
+    model = MyDataParallel(model, device_ids=device_ids)
+
 try:
     optimizer = get_instance(optim, config['optimizer'], model.parameters())
 except AttributeError:
@@ -289,7 +306,7 @@ handler = EarlyStopping(
 evaluator.add_event_handler(Events.COMPLETED, handler)
 
 checkpointer = ModelCheckpoint(
-    save_dir, model_name, score_function=sdr_score_function, n_saved=2, create_dir=True, require_empty=False)
+    save_dir, model_name, score_function=sdr_score_function, n_saved=6, create_dir=True, require_empty=False)
 to_save = {
     'model': model,
     'optimizer': optimizer,
