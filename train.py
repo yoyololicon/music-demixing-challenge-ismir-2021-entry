@@ -251,7 +251,7 @@ tb_logger.attach_output_handler(
 )
 tb_logger.attach(
     trainer,
-    event_name=Events.EPOCH_COMPLETED,
+    event_name=Events.EPOCH_COMPLETED(every=validate_every),
     log_handler=WeightsHistHandler(model)
 )
 tb_logger.attach_opt_params_handler(
@@ -350,10 +350,17 @@ trainer.add_event_handler(Events.EPOCH_COMPLETED(
 
 if args.checkpoint:
     checkpoint = torch.load(args.checkpoint, map_location='cpu')
+    iteration = checkpoint['trainer']['iteration']
+    epoch_length = checkpoint['trainer']['epoch_length']
+    current_epoch = iteration // epoch_length
+    epoch_length = len(train_loader)
+    iteration = current_epoch * epoch_length
+    checkpoint['trainer']['iteration'] = iteration
+    checkpoint['trainer']['epoch_length'] = epoch_length
     Checkpoint.load_objects(to_load=to_save, checkpoint=checkpoint)
 
 if args.weights:
-    model.load_state_dict(torch.load(args.weights, map_location=device))
+    model.load_state_dict(torch.load(args.weights, map_location='cpu'))
 
 trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
