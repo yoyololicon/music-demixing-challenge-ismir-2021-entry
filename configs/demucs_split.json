@@ -14,7 +14,7 @@
                 "subsets": "train",
                 "split": null,
                 "seq_duration": 10,
-                "samples_per_track": 36,
+                "samples_per_track": 120,
                 "random": true,
                 "random_track_mix": true
             }
@@ -64,11 +64,11 @@
         }
     },
     "trainer": {
-        "epochs": 1800,
+        "epochs": 360,
         "save_dir": "saved/",
         "log_dir": "runs/",
-        "cum_steps": 15,
-        "patience": 1000,
+        "cum_steps": 21,
+        "patience": 360,
         "amp_enabled": true,
         "val_epoch_length": null,
         "validate_every": 5,
