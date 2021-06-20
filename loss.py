@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from model import Spec
 from itertools import combinations, chain
 from utils import MWF
+import math
 
 
 class _TLoss(torch.nn.Module):
@@ -24,7 +25,7 @@ class _TLoss(torch.nn.Module):
     def forward(self, *args, **kwargs):
         return self._core_loss(*args, **kwargs)
 
-    def _core_loss(self, pred, gt, mix):
+    def _core_loss(self, pred, gt, mix, *args):
         raise NotImplementedError
 
 
@@ -50,8 +51,60 @@ class _FLoss(torch.nn.Module):
     def forward(self, *args, **kwargs):
         return self._core_loss(*args, **kwargs)
 
-    def _core_loss(self, msk_hat, gt_spec, mix_spec, gt, mix):
+    def _core_loss(self, msk_hat, gt_spec, mix_spec, gt, mix, *args):
         raise NotImplementedError
+
+
+class GMVAE_ELBO(_FLoss):
+    def _core_loss(self, recon, gt_spec, mix_spec, gt, mix, *args):
+        z, z_mu, z_logvar, z_c_mu, z_c_logvar, log_k_c = args
+        batch, sources, channels, bins, steps = recon.shape
+        log_c_z = self.class_log_prob(z, z_c_mu, z_c_logvar)
+        J = z.shape[-1]
+        K = log_c_z.shape[-1]
+        batch = batch * sources * steps
+        D = recon.numel() // batch
+
+        gamma = log_c_z.exp()
+        prior_kl = torch.sum(gamma * log_c_z, -1) + math.log(K)
+        prior_kl = prior_kl.sum() / batch
+
+        z_c_var = z_c_logvar.exp()
+        z_var = z_logvar.exp().unsqueeze(-2)
+        diff = z_mu.unsqueeze(-2) - z_c_mu
+        l2 = diff * diff
+        z_kl = 0.5 * (
+            ((z_c_logvar + (z_var + l2) / z_c_var).sum(-1)
+             * gamma).sum(-1) - (1 + z_logvar).squeeze(-1) * J
+        )
+        z_kl = z_kl.sum() / batch
+
+        k_prob = gamma @ log_k_c.exp().unsqueeze(2)
+        class_ll = k_prob.log().sum() / batch
+
+        diff = recon - gt_spec.abs()
+        l2 = diff * diff
+        var = l2.detach().mean()
+        recon_ll = - 0.5 * (l2.sum() / batch + math.log(2 * math.pi) * D)
+
+        ll = recon_ll + class_ll - z_kl - prior_kl
+        loss = -ll / D
+
+        return loss, {
+            "ll": ll.item(),
+            "recon_ll": recon_ll.item(),
+            "class_ll": class_ll.item(),
+            "z_kl": z_kl.item(),
+            "prior_kl": prior_kl.item(),
+            "mse": var.item(),
+        }
+
+    def class_log_prob(self, z, z_c_mu, z_c_logvar):
+        z = z.unsqueeze(-2)
+        z_c_var = z_c_logvar.exp()
+        diff = z - z_c_mu
+        l2 = diff * diff
+        return torch.log_softmax(-torch.sum(z_c_logvar + l2 / z_c_var, -1), -1)
 
 
 class SDR(torch.nn.Module):
@@ -256,10 +309,14 @@ def _sdr_loss_core(x_hat, x, y):
 
 
 if __name__ == "__main__":
-    mix, pred, gt_time = torch.randn(2, 2, 100), torch.randn(
-        4, 2, 2, 100, requires_grad=True), torch.randn(4, 2, 2, 100)
-    print(sdr_loss(mix, pred, gt_time))
-
-    mix, pred, gt = torch.rand(2, 2, 2049, 100), torch.rand(
-        4, 2, 2, 2049, 100, requires_grad=True), torch.rand(4, 2, 2, 2049, 100)
-    print(real_mse_loss(mix, pred, gt))
+    criterion = GMVAE_ELBO()
+    print(
+        criterion(
+            torch.rand(2, 4, 2, 2049, 10), torch.rand(
+                2, 4, 2, 2049, 10), None, None, None,
+            torch.randn(2, 4, 10, 16), torch.randn(
+                2, 4, 10, 16), torch.randn(2, 4, 10, 1),
+            torch.randn(11, 16), torch.randn(
+                11, 1), torch.randn(4, 11).log_softmax(0)
+        )
+    )

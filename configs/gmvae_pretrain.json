@@ -1,0 +1,99 @@
+{
+    "name": "GMVAE",
+    "arch": {
+        "type": "GMVAE",
+        "args": {
+            "n_fft": 4096,
+            "hidden_channels": 512,
+            "max_bins": 1487,
+            "nb_layers": 3,
+            "latent_size": 512,
+            "c": 10
+        }
+    },
+    "dataset": {
+        "train": {
+            "type": "FastMUSDB",
+            "args": {
+                "root": "~/Datasets/musdb18hq/",
+                "subsets": "train",
+                "split": "train",
+                "seq_duration": 6.0,
+                "samples_per_track": 64,
+                "random": true,
+                "random_track_mix": true
+            }
+        },
+        "valid": {
+            "type": "FastMUSDB",
+            "args": {
+                "root": "~/Datasets/musdb18hq/",
+                "subsets": "train",
+                "split": "valid",
+                "seq_duration": 6.0
+            }
+        }
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args": {
+            "lr": 1e-3,
+            "weight_decay": 1e-5
+        }
+    },
+    "loss": {
+        "type": "GMVAE_ELBO",
+        "args": {}
+    },
+    "lr_scheduler": {
+        "type": "ReduceLROnPlateau",
+        "args": {
+            "factor": 0.3,
+            "patience": 80,
+            "verbose": true
+        }
+    },
+    "data_loader": {
+        "train": {
+            "batch_size": 8,
+            "shuffle": true,
+            "drop_last": true,
+            "num_workers": 2,
+            "prefetch_factor": 6,
+            "pin_memory": false
+        },
+        "valid": {
+            "batch_size": 8,
+            "num_workers": 2,
+            "prefetch_factor": 6,
+            "pin_memory": false
+        }
+    },
+    "trainer": {
+        "epochs": 100,
+        "save_dir": "saved/",
+        "log_dir": "runs/",
+        "cum_steps": 1,
+        "patience": 1000,
+        "amp_enabled": false,
+        "val_epoch_length": null,
+        "validate_every": 1,
+        "targets": [
+            "bass",
+            "drums",
+            "vocals",
+            "other"
+        ],
+        "n_fft": 4096,
+        "hop_length": 1024,
+        "extra_monitor": [
+            "ll",
+            "recon_ll",
+            "class_ll",
+            "z_kl",
+            "prior_kl",
+            "mse"
+        ],
+        "encoder_phase": true
+    }
+}

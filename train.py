@@ -102,6 +102,7 @@ epochs = config['trainer']['epochs']
 n_fft = config['trainer'].get('n_fft', 4096)
 hop_length = config['trainer'].get('hop_length', 1024)
 time_domain = config['trainer'].get('time_domain', False)
+encoder_phase = config['trainer'].get('encoder_phase', True)
 mwf_kwargs = config.get('MWF', {})
 
 if time_domain:
@@ -122,17 +123,24 @@ scaler = amp.GradScaler(enabled=amp_enabled)
 
 
 def _process_core(x, y):
-    if time_domain:
-        with amp.autocast(enabled=amp_enabled):
-            pred = model(x)
-        return criterion(pred, y, x) + (pred,)
 
-    X = spec(x)
+    if time_domain:
+        if encoder_phase:
+            input_wav = y
+        else:
+            input_wav = x
+        with amp.autocast(enabled=amp_enabled):
+            recon, *_ = model(input_wav)
+        return criterion(recon, y, x) + (recon,)
+
+    X = spec(x) if not encoder_phase else None
     Y = spec(y)
-    X_mag = X.abs()
     with amp.autocast(enabled=amp_enabled):
-        pred_mask = model(X_mag)
-    return criterion(pred_mask, Y, X, y, x) + (pred_mask, X)
+        if encoder_phase:
+            recon, *_ = model(Y.abs())
+        else:
+            recon, *_ = model(X.abs())
+    return criterion(recon, Y, X, y, x, *_) + (recon, X, Y)
 
 
 def process_function(engine, batch):
@@ -164,13 +172,17 @@ def _eval_core(x, y):
     if time_domain:
         return ret
 
-    loss, extra_losses, pred_mask, X = ret
+    loss, extra_losses, recon, X, Y = ret
+    recon = recon.relu()
 
-    if pred_mask.ndim == X.ndim:
-        pred_mask = pred_mask.unsqueeze(1)
+    if encoder_phase:
+        xpred = spec(recon * torch.exp(1j * torch.angle(Y)), inverse=True)
+    else:
+        if recon.ndim == X.ndim:
+            recon = recon.unsqueeze(1)
 
-    Y = mwf(pred_mask, X)
-    xpred = spec(Y, inverse=True)
+        newY = mwf(recon / (X.abs().unsqueeze(1) + 1e-8), X)
+        xpred = spec(newY, inverse=True)
     return loss, extra_losses, xpred
 
 
@@ -260,7 +272,7 @@ tb_logger.attach_output_handler(
 )
 tb_logger.attach(
     trainer,
-    event_name=Events.EPOCH_COMPLETED,
+    event_name=Events.EPOCH_COMPLETED(every=validate_every),
     log_handler=WeightsHistHandler(model)
 )
 tb_logger.attach_opt_params_handler(
@@ -271,7 +283,11 @@ tb_logger.attach_opt_params_handler(
 
 # add model graph
 # use torchinfo
-test_input = torch.from_numpy(val_data[0][0]).to(device).unsqueeze(0)
+tmp = val_data[0]
+if encoder_phase:
+    test_input = torch.from_numpy(tmp[1]).to(device).unsqueeze(0)
+else:
+    test_input = torch.from_numpy(tmp[0]).to(device).unsqueeze(0)
 if not time_domain:
     test_input = spec(test_input).abs()
 summary(model,
@@ -318,29 +334,39 @@ def _predict_core(x):
     x = x.unsqueeze(0)
     if time_domain:
         with amp.autocast(enabled=amp_enabled):
-            return model(x).squeeze()
+            recon, *_ = model(x)
+            return recon.squeeze()
 
     X = spec(x)
     X_mag = X.abs()
     with amp.autocast(enabled=amp_enabled):
-        pred_mask = model(X_mag)
+        recon, *_ = model(X_mag)
 
-    if pred_mask.ndim == X_mag.ndim:
-        pred_mask = pred_mask.unsqueeze(1)
+    recon = recon.relu()
 
-    Y = mwf(pred_mask, X).squeeze()
-    xpred = spec(Y, inverse=True)
+    if encoder_phase:
+        xpred = spec(recon * torch.exp(1j * torch.angle(X)),
+                     inverse=True).squeeze()
+    else:
+        if recon.ndim == X_mag.ndim:
+            recon = recon.unsqueeze(1)
+
+        Y = mwf(recon / (X.abs().unsqueeze(1) + 1e-8), X).squeeze()
+        xpred = spec(Y, inverse=True)
     return xpred
 
 
 def predict_samples(engine):
     model.eval()
     with torch.no_grad():
-        x, _ = val_data[random.randrange(len(val_data))]
+        x, y = val_data[random.randrange(len(val_data))]
         x = torch.from_numpy(x)
+        y = torch.from_numpy(y)
+
         tb_logger.writer.add_audio('mixture', x.t(), engine.state.epoch)
 
-        xpred = _predict_core(x.to(device)).cpu().clip(-1, 1)
+        xpred = _predict_core(
+            y.to(device) if encoder_phase else x.to(device)).cpu().clip(-1, 1)
 
         if len(targets_idx) > 1:
             xpred = xpred.transpose(1, 2)
@@ -362,7 +388,7 @@ if args.checkpoint:
     Checkpoint.load_objects(to_load=to_save, checkpoint=checkpoint)
 
 if args.weights:
-    model.load_state_dict(torch.load(args.weights, map_location=device))
+    model.load_state_dict(torch.load(args.weights, map_location='cpu'))
 
 trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
