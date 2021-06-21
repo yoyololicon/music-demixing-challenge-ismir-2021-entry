@@ -364,6 +364,8 @@ def predict_samples(engine):
         y = torch.from_numpy(y)
 
         tb_logger.writer.add_audio('mixture', x.t(), engine.state.epoch)
+        tb_logger.writer.add_image(
+            'k_c', model.log_k_c.exp(), engine.state.epoch, dataformats='HW')
 
         xpred = _predict_core(
             y.to(device) if encoder_phase else x.to(device)).cpu().clip(-1, 1)

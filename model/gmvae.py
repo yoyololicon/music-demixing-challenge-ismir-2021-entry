@@ -140,14 +140,21 @@ class GMVAE(nn.Module):
         other_z_mu, other_z_logvar = self.latent_linear(
             other).split([self.latent_size, 1], 2)
 
-        bass_z = bass_z_mu + \
-            torch.randn_like(bass_z_mu) * torch.exp(0.5 * bass_z_logvar)
-        drums_z = drums_z_mu + \
-            torch.randn_like(drums_z_mu) * torch.exp(0.5 * drums_z_logvar)
-        vocals_z = vocals_z_mu + \
-            torch.randn_like(vocals_z_mu) * torch.exp(0.5 * vocals_z_logvar)
-        other_z = other_z_mu + \
-            torch.randn_like(other_z_mu) * torch.exp(0.5 * other_z_logvar)
+        bass_z = bass_z_mu
+        drums_z = drums_z_mu
+        vocals_z = vocals_z_mu
+        other_z = other_z_mu
+
+        if self.training:
+            bass_z = bass_z + \
+                torch.randn_like(bass_z_mu) * torch.exp(0.5 * bass_z_logvar)
+            drums_z = drums_z + \
+                torch.randn_like(drums_z_mu) * torch.exp(0.5 * drums_z_logvar)
+            vocals_z = vocals_z + \
+                torch.randn_like(vocals_z_mu) * \
+                torch.exp(0.5 * vocals_z_logvar)
+            other_z = other_z + \
+                torch.randn_like(other_z_mu) * torch.exp(0.5 * other_z_logvar)
 
         bass, *_ = self.bass_dec(bass_z)
         drums, *_ = self.drums_dec(drums_z)

@@ -85,7 +85,8 @@ class GMVAE_ELBO(_FLoss):
         diff = recon - gt_spec.abs()
         l2 = diff * diff
         var = l2.detach().mean()
-        recon_ll = - 0.5 * (l2.sum() / batch + math.log(2 * math.pi) * D)
+        recon_ll = - 0.5 * (l2.sum() / batch / var +
+                            math.log(2 * math.pi) * D + var.log() * D)
 
         ll = recon_ll + class_ll - z_kl - prior_kl
         loss = -ll / D

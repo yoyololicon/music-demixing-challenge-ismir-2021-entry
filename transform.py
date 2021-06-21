@@ -149,10 +149,9 @@ class RandomPitch(_DeviceTransformBase):
             self.resamplers.append(ResampleFrac(rr, 100))
 
     def _transform(self, stems, index):
-        spec = torch.view_as_real(self.spec(stems))
+        spec = self.spec(stems)
         stretched_spec = self.stretcher(spec, self.rates[index])
-        stretched_stems = self.spec(
-            torch.view_as_complex(stretched_spec), inverse=True)
+        stretched_stems = self.spec(stretched_spec, inverse=True)
         shifted_stems = self.resamplers[index](
             stretched_stems.view(-1, stretched_stems.shape[-1])).view(*stretched_stems.shape[:-1], -1)
         return shifted_stems
