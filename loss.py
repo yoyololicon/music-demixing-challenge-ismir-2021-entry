@@ -1,3 +1,4 @@
+import scipy as sp
 import torch
 import torch.nn.functional as F
 from model import Spec
@@ -55,10 +56,99 @@ class _FLoss(torch.nn.Module):
         raise NotImplementedError
 
 
+def vad_mask(spec: torch.Tensor, threshold: float = -60):
+    nfft = spec.shape[-1] * 2 - 2
+    power = spec.abs().pow(2)
+    energy = power.sum(-1) * 2 - power[..., 0] - power[..., -1]
+    energy /= nfft * nfft
+    energy = 10 * energy.log10()
+    return energy > threshold
+
+
+class VAE_ELBO(_FLoss):
+    def __init__(self, infer_class=False, combine_sources=False):
+        super().__init__()
+        self.infer_class = infer_class
+        self.combine_sources = combine_sources
+
+    def _core_loss(self, recon, gt_spec, mix_spec, gt, mix, *args):
+        batch, sources, channels, bins, steps = recon.shape
+        z, z_mu, z_logvar, *_ = args
+        J = z.shape[-1]
+        try:
+            k_mu, k_logvar = _
+        except:
+            k_mu = k_logvar = z.new_zeros((sources + 1, J))
+
+        assert k_mu.shape[0] == 5
+
+        batch = batch * sources * steps
+        D = recon.numel() // batch
+        if self.combine_sources:
+            batch /= sources
+
+        mask = vad_mask(gt_spec.transpose(3, 4)).any(dim=2).transpose(1, 2)
+
+        full_mu, full_logvar = k_mu, k_logvar
+        silent_mu, silent_logvar = k_mu[-1:], k_logvar[-1:]
+        k_mu, k_logvar = k_mu[:-1], k_logvar[:-1]
+
+        k_mu = torch.where(mask[..., None], k_mu, silent_mu)
+        k_logvar = torch.where(mask[..., None], k_logvar, silent_logvar)
+
+        if self.combine_sources:
+            recon = recon.sum(1)
+            gt_spec = mix_spec
+
+        diff = recon - gt_spec.abs()
+        l2 = diff * diff
+        mse = l2.detach().mean()
+        var = mse.clip(0.5, 1.5)
+        recon_ll = - 0.5 * (l2.sum() / batch / var +
+                            math.log(2 * math.pi) * D + var.log() * D)
+
+        z_kl = 0.5 * (
+            (z_logvar.exp() + (z_mu - k_mu).pow(2)) /
+            k_logvar.exp() + k_logvar - z_logvar - 1
+        ).sum()
+
+        z_kl /= batch
+        elbo = recon_ll - z_kl
+
+        ret_dict = {
+            "recon_ll": recon_ll.item(),
+            "z_kl": z_kl.item(),
+            "mse": mse.item(),
+        }
+
+        if self.infer_class:
+            prob_logits = self.class_log_prob(z, full_mu, full_logvar)
+            log_prob = torch.where(
+                mask,
+                torch.einsum('...ii->...i', prob_logits[..., :-1]),
+                prob_logits[..., -1]
+            )
+            class_ll = log_prob.sum() / batch
+            elbo += class_ll
+            ret_dict['class_ll'] = class_ll.item()
+        ret_dict['elbo'] = elbo.item()
+        loss = -elbo / D
+
+        return loss, ret_dict
+
+    def class_log_prob(self, z, z_c_mu, z_c_logvar):
+        z = z.unsqueeze(-2)
+        z_c_var = z_c_logvar.exp()
+        diff = z - z_c_mu
+        l2 = diff * diff
+        return torch.log_softmax(-torch.sum(z_c_logvar + l2 / z_c_var, -1), -1)
+
+
 class GMVAE_ELBO(_FLoss):
     def _core_loss(self, recon, gt_spec, mix_spec, gt, mix, *args):
         z, z_mu, z_logvar, z_c_mu, z_c_logvar, log_k_c = args
         batch, sources, channels, bins, steps = recon.shape
+        assert log_k_c.shape[0] == 5
         log_c_z = self.class_log_prob(z, z_c_mu, z_c_logvar)
         J = z.shape[-1]
         K = log_c_z.shape[-1]
@@ -75,29 +165,35 @@ class GMVAE_ELBO(_FLoss):
         l2 = diff * diff
         z_kl = 0.5 * (
             ((z_c_logvar + (z_var + l2) / z_c_var).sum(-1)
-             * gamma).sum(-1) - (1 + z_logvar).squeeze(-1) * J
+             * gamma).sum(-1) - (1 + z_logvar).sum(-1)
         )
         z_kl = z_kl.sum() / batch
 
-        k_prob = gamma @ log_k_c.exp().unsqueeze(2)
-        class_ll = k_prob.log().sum() / batch
+        mask = vad_mask(gt_spec.transpose(3, 4)).any(dim=2).transpose(1, 2)
+        label = torch.where(mask, torch.arange(4, device=z.device), 4)
+
+        k_prob = gamma @ log_k_c.exp().t()
+        class_ll = -F.nll_loss(k_prob.permute(0, 3, 1,
+                                              2).log(), label, reduction='sum')
+        class_ll /= batch
 
         diff = recon - gt_spec.abs()
         l2 = diff * diff
-        var = l2.detach().mean()
+        mse = l2.detach().mean()
+        var = mse.clip(0.5, 1.5)
         recon_ll = - 0.5 * (l2.sum() / batch / var +
                             math.log(2 * math.pi) * D + var.log() * D)
 
-        ll = recon_ll + class_ll - z_kl - prior_kl
-        loss = -ll / D
+        elbo = recon_ll + class_ll - z_kl - prior_kl
+        loss = -elbo / D
 
         return loss, {
-            "ll": ll.item(),
+            "elbo": elbo.item(),
             "recon_ll": recon_ll.item(),
             "class_ll": class_ll.item(),
             "z_kl": z_kl.item(),
             "prior_kl": prior_kl.item(),
-            "mse": var.item(),
+            "mse": mse.item(),
         }
 
     def class_log_prob(self, z, z_c_mu, z_c_logvar):

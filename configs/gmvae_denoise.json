@@ -1,7 +1,7 @@
 {
     "name": "GMVAESupervised",
     "arch": {
-        "type": "GMVAE",
+        "type": "GMVAEDenoise",
         "args": {
             "n_fft": 4096,
             "hidden_channels": 512,
@@ -44,7 +44,8 @@
     "loss": {
         "type": "VAE_ELBO",
         "args": {
-            "infer_class": true
+            "infer_class": true,
+            "combine_sources": false
         }
     },
     "lr_scheduler": {
@@ -95,6 +96,6 @@
             "mse",
             "class_ll"
         ],
-        "encoder_phase": true
+        "encoder_phase": false
     }
 }

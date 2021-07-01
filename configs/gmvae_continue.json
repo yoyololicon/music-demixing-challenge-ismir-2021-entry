@@ -1,14 +1,14 @@
 {
-    "name": "GMVAESupervised",
+    "name": "VAE",
     "arch": {
-        "type": "GMVAE",
+        "type": "GMVAEJoint",
         "args": {
             "n_fft": 4096,
             "hidden_channels": 512,
             "max_bins": 1487,
             "nb_layers": 3,
-            "latent_size": 256,
-            "c": 5
+            "latent_size": 64,
+            "c": 6
         }
     },
     "dataset": {
@@ -42,10 +42,8 @@
         }
     },
     "loss": {
-        "type": "VAE_ELBO",
-        "args": {
-            "infer_class": true
-        }
+        "type": "GMVAE_ELBO",
+        "args": {}
     },
     "lr_scheduler": {
         "type": "ReduceLROnPlateau",
@@ -93,6 +91,7 @@
             "recon_ll",
             "z_kl",
             "mse",
+            "prior_kl",
             "class_ll"
         ],
         "encoder_phase": true

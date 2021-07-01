@@ -4,3 +4,5 @@ estimates/
 *tfevents.*
 saved/
 waveflow_saved/
+*.pbtxt
+*.tsv

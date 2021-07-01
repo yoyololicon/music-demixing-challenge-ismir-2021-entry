@@ -101,16 +101,11 @@ patience = config['trainer']['patience']
 epochs = config['trainer']['epochs']
 n_fft = config['trainer'].get('n_fft', 4096)
 hop_length = config['trainer'].get('hop_length', 1024)
-time_domain = config['trainer'].get('time_domain', False)
 encoder_phase = config['trainer'].get('encoder_phase', True)
 mwf_kwargs = config.get('MWF', {})
 
-if time_domain:
-    def spec(x): return x
-    def mwf(x): return x
-else:
-    spec = module_arch.Spec(n_fft, hop_length).to(device)
-    mwf = MWF(**mwf_kwargs)
+spec = module_arch.Spec(n_fft, hop_length).to(device)
+mwf = MWF(**mwf_kwargs)
 
 # get target index
 targets_idx = []
@@ -123,23 +118,16 @@ scaler = amp.GradScaler(enabled=amp_enabled)
 
 
 def _process_core(x, y):
-
-    if time_domain:
-        if encoder_phase:
-            input_wav = y
-        else:
-            input_wav = x
-        with amp.autocast(enabled=amp_enabled):
-            recon, *_ = model(input_wav)
-        return criterion(recon, y, x) + (recon,)
-
-    X = spec(x) if not encoder_phase else None
+    X = spec(x)
     Y = spec(y)
+    if encoder_phase:
+        mag = Y.abs()
+    else:
+        mag = X.abs()
+
     with amp.autocast(enabled=amp_enabled):
-        if encoder_phase:
-            recon, *_ = model(Y.abs())
-        else:
-            recon, *_ = model(X.abs())
+        recon, *_ = model(mag)
+
     return criterion(recon, Y, X, y, x, *_) + (recon, X, Y)
 
 
@@ -169,20 +157,16 @@ def process_function(engine, batch):
 
 def _eval_core(x, y):
     ret = _process_core(x, y)
-    if time_domain:
-        return ret
 
     loss, extra_losses, recon, X, Y = ret
-    recon = recon.relu()
 
-    if encoder_phase:
-        xpred = spec(recon * torch.exp(1j * torch.angle(Y)), inverse=True)
-    else:
-        if recon.ndim == X.ndim:
-            recon = recon.unsqueeze(1)
+    if recon.ndim == X.ndim:
+        recon = recon.unsqueeze(1)
 
-        newY = mwf(recon / (X.abs().unsqueeze(1) + 1e-8), X)
-        xpred = spec(newY, inverse=True)
+    mask = recon / recon.sum(1, keepdim=True)
+
+    newY = mwf(mask, X)
+    xpred = spec(newY, inverse=True)
     return loss, extra_losses, xpred
 
 
@@ -288,8 +272,9 @@ if encoder_phase:
     test_input = torch.from_numpy(tmp[1]).to(device).unsqueeze(0)
 else:
     test_input = torch.from_numpy(tmp[0]).to(device).unsqueeze(0)
-if not time_domain:
-    test_input = spec(test_input).abs()
+
+test_input = spec(test_input).abs()
+test_input /= test_input.max()
 summary(model,
         input_data=test_input,
         device=device,
@@ -332,27 +317,24 @@ evaluator.add_event_handler(
 
 def _predict_core(x):
     x = x.unsqueeze(0)
-    if time_domain:
-        with amp.autocast(enabled=amp_enabled):
-            recon, *_ = model(x)
-            return recon.squeeze()
 
     X = spec(x)
-    X_mag = X.abs()
-    with amp.autocast(enabled=amp_enabled):
-        recon, *_ = model(X_mag)
-
-    recon = recon.relu()
-
-    if encoder_phase:
-        xpred = spec(recon * torch.exp(1j * torch.angle(X)),
-                     inverse=True).squeeze()
+    if X.shape[1] == 4:
+        mix = X.sum(1)
     else:
-        if recon.ndim == X_mag.ndim:
-            recon = recon.unsqueeze(1)
+        mix = X
 
-        Y = mwf(recon / (X.abs().unsqueeze(1) + 1e-8), X).squeeze()
-        xpred = spec(Y, inverse=True)
+    mag = X.abs()
+    with amp.autocast(enabled=amp_enabled):
+        recon, *_ = model(mag)
+
+    if recon.ndim == mix.ndim:
+        recon = recon.unsqueeze(1)
+
+    mask = recon / recon.sum(1, keepdim=True)
+
+    Y = mwf(mask, mix).squeeze()
+    xpred = spec(Y, inverse=True)
     return xpred
 
 
@@ -364,8 +346,9 @@ def predict_samples(engine):
         y = torch.from_numpy(y)
 
         tb_logger.writer.add_audio('mixture', x.t(), engine.state.epoch)
-        tb_logger.writer.add_image(
-            'k_c', model.log_k_c.exp(), engine.state.epoch, dataformats='HW')
+        if hasattr(model, 'log_k_c'):
+            tb_logger.writer.add_image(
+                'k_c', model.log_k_c.exp(), engine.state.epoch, dataformats='HW')
 
         xpred = _predict_core(
             y.to(device) if encoder_phase else x.to(device)).cpu().clip(-1, 1)
@@ -387,10 +370,22 @@ trainer.add_event_handler(Events.EPOCH_COMPLETED(
 
 if args.checkpoint:
     checkpoint = torch.load(args.checkpoint, map_location='cpu')
+    iteration = checkpoint['trainer']['iteration']
+    epoch_length = checkpoint['trainer']['epoch_length']
+    current_epoch = iteration // epoch_length
+    epoch_length = len(train_loader)
+    iteration = current_epoch * epoch_length
+    checkpoint['trainer']['iteration'] = iteration
+    checkpoint['trainer']['epoch_length'] = epoch_length
     Checkpoint.load_objects(to_load=to_save, checkpoint=checkpoint)
 
 if args.weights:
-    model.load_state_dict(torch.load(args.weights, map_location='cpu'))
+    weights = torch.load(args.weights, map_location='cpu')
+    try:
+        weights = weights['model']
+    except:
+        pass
+    model.load_state_dict(weights, strict=False)
 
 trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
