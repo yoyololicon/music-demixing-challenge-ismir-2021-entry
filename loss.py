@@ -103,6 +103,11 @@ class CL1Loss(_TLoss):
         return loss_l1, {}
 
 
+class L1Loss(_TLoss):
+    def _core_loss(self, pred, gt, mix):
+        return F.l1_loss(pred, gt[..., :pred.shape[-1]]), {}
+
+
 class CLoss(_FLoss):
     def __init__(self, mcoeff=10, n_fft=4096, hop_length=1024, complex_mse=True, **mwf_kwargs):
         super().__init__()

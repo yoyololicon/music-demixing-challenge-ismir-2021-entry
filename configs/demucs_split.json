@@ -1,5 +1,5 @@
 {
-    "name": "DemucsSplit",
+    "name": "Demucs",
     "arch": {
         "type": "DemucsSplit",
         "args": {
@@ -14,7 +14,7 @@
                 "subsets": "train",
                 "split": null,
                 "seq_duration": 10,
-                "samples_per_track": 120,
+                "samples_per_track": 150,
                 "random": true,
                 "random_track_mix": true
             }
@@ -23,8 +23,8 @@
             "type": "FastMUSDB",
             "args": {
                 "root": "~/Datasets/musdb18hq/",
-                "subsets": "test",
-                "split": null,
+                "subsets": "train",
+                "split": "valid",
                 "seq_duration": 10
             }
         }
@@ -36,42 +36,42 @@
         }
     },
     "loss": {
-        "type": "CL1Loss",
+        "type": "L1Loss",
         "args": {}
     },
     "lr_scheduler": {
         "type": "ReduceLROnPlateau",
         "args": {
             "factor": 0.3,
-            "patience": 1800,
+            "patience": 500,
             "verbose": true
         }
     },
     "data_loader": {
         "train": {
-            "batch_size": 3,
+            "batch_size": 2,
             "shuffle": true,
             "drop_last": true,
             "num_workers": 2,
             "prefetch_factor": 4,
-            "pin_memory": true
+            "pin_memory": false
         },
         "valid": {
             "batch_size": 4,
             "num_workers": 2,
             "prefetch_factor": 4,
-            "pin_memory": true
+            "pin_memory": false
         }
     },
     "trainer": {
         "epochs": 360,
         "save_dir": "saved/",
         "log_dir": "runs/",
-        "cum_steps": 21,
-        "patience": 360,
+        "cum_steps": 32,
+        "patience": 500,
         "amp_enabled": true,
         "val_epoch_length": null,
-        "validate_every": 5,
+        "validate_every": 1,
         "targets": [
             "bass",
             "drums",

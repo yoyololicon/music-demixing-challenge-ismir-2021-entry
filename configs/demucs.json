@@ -3,7 +3,7 @@
     "arch": {
         "type": "Demucs",
         "args": {
-            "channels": 48
+            "channels": 64
         }
     },
     "dataset": {
@@ -14,7 +14,7 @@
                 "subsets": "train",
                 "split": null,
                 "seq_duration": 10,
-                "samples_per_track": 36,
+                "samples_per_track": 150,
                 "random": true,
                 "random_track_mix": true
             }
@@ -23,8 +23,8 @@
             "type": "FastMUSDB",
             "args": {
                 "root": "~/Datasets/musdb18hq/",
-                "subsets": "test",
-                "split": null,
+                "subsets": "train",
+                "split": "valid",
                 "seq_duration": 10
             }
         }
@@ -36,14 +36,14 @@
         }
     },
     "loss": {
-        "type": "CL1Loss",
+        "type": "L1Loss",
         "args": {}
     },
     "lr_scheduler": {
         "type": "ReduceLROnPlateau",
         "args": {
             "factor": 0.3,
-            "patience": 80,
+            "patience": 400,
             "verbose": true
         }
     },
@@ -54,17 +54,17 @@
             "drop_last": true,
             "num_workers": 2,
             "prefetch_factor": 6,
-            "pin_memory": true
+            "pin_memory": false
         },
         "valid": {
             "batch_size": 4,
             "num_workers": 2,
             "prefetch_factor": 6,
-            "pin_memory": true
+            "pin_memory": false
         }
     },
     "trainer": {
-        "epochs": 1000,
+        "epochs": 360,
         "save_dir": "saved/",
         "log_dir": "runs/",
         "cum_steps": 16,

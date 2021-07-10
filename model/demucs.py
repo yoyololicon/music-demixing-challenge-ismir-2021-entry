@@ -2,7 +2,6 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import julius
-from torch_fftconv import FFTConv1d
 
 
 def rescale_conv(reference):
@@ -94,16 +93,21 @@ class Demucs(nn.Module):
 
         self.lstm = nn.LSTM(
             input_size=channels,
-            hidden_size=channels,
+            hidden_size=channels // 2,
             num_layers=lstm_layers,
             dropout=0,
             bidirectional=True)
-        self.lstm_linear = nn.Linear(channels * 2, channels)
+        self.lstm_linear = nn.Linear(channels, channels)
 
         self.apply(rescale_conv(reference=rescale))
 
     def forward(self, x):
         length = x.size(2)
+
+        mono = x.mean(1, keepdim=True)
+        mu = mono.mean(dim=-1, keepdim=True)
+        std = mono.std(dim=-1, keepdim=True).add_(1e-5)
+        x = (x - mu) / std
 
         if hasattr(self, 'up_sample'):
             x = self.up_sample(x)
@@ -119,25 +123,26 @@ class Demucs(nn.Module):
 
         for decode in self.decoder:
             skip = saved.pop()
-            diff = skip.shape[2] - x.shape[2]
+            # diff = skip.shape[2] - x.shape[2]
 
-            if diff > 0:
-                l_pad = diff // 2
-                r_pad = diff - l_pad
-                x = F.pad(x, [l_pad, r_pad])
-            x = x + skip
+            # if diff > 0:
+            #     l_pad = diff // 2
+            #     r_pad = diff - l_pad
+            #     x = F.pad(x, [l_pad, r_pad])
+            x = x + skip[..., :x.shape[2]]
             x = decode(x)
 
         if hasattr(self, 'down_sample'):
             x = self.down_sample(x)
 
-        diff = length - x.shape[2]
+        # diff = length - x.shape[2]
 
-        if diff > 0:
-            l_pad = diff // 2
-            r_pad = diff - l_pad
-            x = F.pad(x, [l_pad, r_pad])
+        # if diff > 0:
+        #     l_pad = diff // 2
+        #     r_pad = diff - l_pad
+        #     x = F.pad(x, [l_pad, r_pad])
 
+        x = x * std + mu
         x = x.view(x.size(0), 4, 2, x.size(-1))
         return x
 
@@ -215,6 +220,11 @@ class DemucsSplit(nn.Module):
     def forward(self, x):
         length = x.size(2)
 
+        mono = x.mean(1, keepdim=True)
+        mu = mono.mean(dim=-1, keepdim=True)
+        std = mono.std(dim=-1, keepdim=True).add_(1e-5)
+        x = (x - mu) / std
+
         if hasattr(self, 'up_sample'):
             x = self.up_sample(x)
 
@@ -229,14 +239,14 @@ class DemucsSplit(nn.Module):
 
         for decode, pre_dec, conv1x1 in zip(self.decoder, self.dec_pre_convs, self.convs_1x1):
             skip = saved.pop()
-            diff = skip.shape[2] - x.shape[2]
+            # diff = skip.shape[2] - x.shape[2]
 
-            if diff > 0:
-                l_pad = diff // 2
-                r_pad = diff - l_pad
-                x = F.pad(x, [l_pad, r_pad])
+            # if diff > 0:
+            #     l_pad = diff // 2
+            #     r_pad = diff - l_pad
+            #     x = F.pad(x, [l_pad, r_pad])
 
-            x = pre_dec(x) + conv1x1(skip)
+            x = pre_dec(x) + conv1x1(skip[..., :x.shape[2]])
             a, b = x.view(x.shape[0], 4, -1, x.shape[2]).chunk(2, 2)
             x = a * b.sigmoid()
             x = decode(x.view(x.shape[0], -1, x.shape[3]))
@@ -244,13 +254,14 @@ class DemucsSplit(nn.Module):
         if hasattr(self, 'down_sample'):
             x = self.down_sample(x)
 
-        diff = length - x.shape[2]
+        # diff = length - x.shape[2]
 
-        if diff > 0:
-            l_pad = diff // 2
-            r_pad = diff - l_pad
-            x = F.pad(x, [l_pad, r_pad])
+        # if diff > 0:
+        #     l_pad = diff // 2
+        #     r_pad = diff - l_pad
+        #     x = F.pad(x, [l_pad, r_pad])
 
+        x = x * std + mu
         x = x.view(-1, 4, 2, x.size(-1))
         return x
 
