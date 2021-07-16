@@ -9,6 +9,7 @@ dependencies:
   - pip
   - pytorch
   - torchaudio
+  - torchvision
   - cudatoolkit=11.1
   - ignite
   - tensorboard
@@ -20,4 +21,5 @@ dependencies:
     - torch-optimizer
     - musdb
     - torchinfo
+    - julius
     - git+https://github.com/yoyololicon/norbert@batch-support

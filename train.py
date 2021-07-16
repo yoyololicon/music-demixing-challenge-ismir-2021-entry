@@ -32,6 +32,10 @@ parser.add_argument('--checkpoint', type=str, default=None,
                     help='training checkpoint')
 parser.add_argument('--weights', type=str, default=None,
                     help='initial model weights')
+parser.add_argument('-d', '--device', default=0,
+                    type=int, help='cuda device number')
+parser.add_argument('--device_ids',  default=None, type=int, nargs='+',
+                    help='indices of GPUs for DataParallel (default: None)')
 
 args = parser.parse_args()
 
@@ -39,7 +43,8 @@ config = json.load(open(args.config))
 validate(config, schema=CONFIG_SCHEMA)
 
 if torch.cuda.is_available():
-    device = 'cuda'
+    device = f"cuda:{args.device}"
+    device_ids = args.device_ids
     torch.backends.cudnn.benchmark = True
 else:
     device = 'cpu'
@@ -66,6 +71,11 @@ val_loader = DataLoader(val_data, **config['data_loader']['valid'])
 
 
 model = get_instance(module_arch, config['arch']).to(device)
+
+if device_ids:
+    print(f'using multi-GPU')
+    model = nn.DataParallel(model, device_ids=device_ids)
+
 try:
     optimizer = get_instance(optim, config['optimizer'], model.parameters())
 except AttributeError:
