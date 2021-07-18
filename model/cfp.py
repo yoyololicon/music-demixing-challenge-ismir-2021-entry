@@ -8,8 +8,6 @@ from torch import nn, fft
 import torch.nn.functional as F
 
 
-
-
 class MLC(nn.Module):
     def __init__(self, sr, n_fft, hop_size,
                  g=[0.24, 0.6, 1],
@@ -176,7 +174,10 @@ if __name__ == "__main__":
 
     y, sr = librosa.load(librosa.ex('trumpet'), sr=44100)
     print(y.shape, sr)
-
+    mu, std = np.mean(y), np.std(y)
+    y = (y - mu) / std
+    print(mu, std)
+    
     y = torch.Tensor(y[None, :])
     pitch = cfp(*mlc(y))
     print(pitch.shape, pitch.max())

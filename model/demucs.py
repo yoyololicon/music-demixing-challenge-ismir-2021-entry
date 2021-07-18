@@ -6,6 +6,21 @@ import julius
 from .cfp import MLC, CFP
 
 
+@torch.jit.script
+def glu(a, b):
+    return a * b.sigmoid()
+
+
+@torch.jit.script
+def standardize(x, mu, std):
+    return (x - mu) / std
+
+
+@torch.jit.script
+def destandardize(x, mu, std):
+    return x * std + mu
+
+
 def rescale_conv(reference):
     @torch.no_grad()
     def closure(m: nn.Module):
@@ -394,7 +409,8 @@ class DemucsCFP(nn.Module):
         mono = x.mean(1, keepdim=True)
         mu = mono.mean(dim=-1, keepdim=True)
         std = mono.std(dim=-1, keepdim=True).add_(1e-5)
-        x = (x - mu) / std
+        # x = (x - mu) / std
+        x = standardize(x, mu, std)
 
         ceps, spec = self.mlc(F.pad(x.view(-1, length), self.pad_size))
         cfp = self.cfp(ceps, spec)
@@ -419,13 +435,15 @@ class DemucsCFP(nn.Module):
             skip = saved.pop()
             x = pre_dec(x) + conv1x1(skip[..., :x.shape[2]])
             a, b = x.view(x.shape[0], 4, -1, x.shape[2]).chunk(2, 2)
-            x = a * b.sigmoid()
+            # x = a * b.sigmoid()
+            x = glu(a, b)
             x = decode(x.view(x.shape[0], -1, x.shape[3]))
 
         if hasattr(self, 'down_sample'):
             x = self.down_sample(x)
 
-        x = x * std + mu
+        # x = x * std + mu
+        x = destandardize(x, mu, std)
         x = x.view(-1, 4, 2, x.size(-1))
         return x
 
