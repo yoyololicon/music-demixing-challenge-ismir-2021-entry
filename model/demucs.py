@@ -384,7 +384,7 @@ class DemucsCFP(nn.Module):
             input_size=channels + condition_channels * 2,
             hidden_size=channels,
             num_layers=lstm_layers,
-            dropout=0,
+            dropout=0.3,
             bidirectional=True)
         self.lstm_linear = nn.Linear(
             channels * 2 + condition_channels * 2, channels * 2)
