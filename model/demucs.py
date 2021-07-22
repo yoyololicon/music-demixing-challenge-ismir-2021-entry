@@ -240,7 +240,7 @@ class DemucsSplit(nn.Module):
         mono = x.mean(1, keepdim=True)
         mu = mono.mean(dim=-1, keepdim=True)
         std = mono.std(dim=-1, keepdim=True).add_(1e-5)
-        x = (x - mu) / std
+        x = standardize(x, mu, std)
 
         if hasattr(self, 'up_sample'):
             x = self.up_sample(x)
@@ -265,7 +265,7 @@ class DemucsSplit(nn.Module):
 
             x = pre_dec(x) + conv1x1(skip[..., :x.shape[2]])
             a, b = x.view(x.shape[0], 4, -1, x.shape[2]).chunk(2, 2)
-            x = a * b.sigmoid()
+            x = glu(a, b)
             x = decode(x.view(x.shape[0], -1, x.shape[3]))
 
         if hasattr(self, 'down_sample'):
@@ -278,7 +278,7 @@ class DemucsSplit(nn.Module):
         #     r_pad = diff - l_pad
         #     x = F.pad(x, [l_pad, r_pad])
 
-        x = x * std + mu
+        x = destandardize(x, mu, std)
         x = x.view(-1, 4, 2, x.size(-1))
         return x
 
