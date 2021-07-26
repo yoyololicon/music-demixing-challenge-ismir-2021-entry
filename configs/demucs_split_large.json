@@ -36,7 +36,7 @@
         }
     },
     "loss": {
-        "type": "L1Loss",
+        "type": "CL1Loss",
         "args": {}
     },
     "lr_scheduler": {

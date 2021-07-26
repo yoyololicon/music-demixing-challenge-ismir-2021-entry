@@ -92,6 +92,7 @@ class WaveGlowLoss(torch.nn.Module):
 
 class CL1Loss(_TLoss):
     def _core_loss(self, pred, gt, mix):
+        gt = gt[..., :pred.shape[-1]]
         loss = []
         for c in chain(combinations(range(4), 1), combinations(range(4), 2), combinations(range(4), 3)):
             x = sum([pred[:, i] for i in c])
