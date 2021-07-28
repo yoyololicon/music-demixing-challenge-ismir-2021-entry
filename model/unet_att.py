@@ -3,6 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 from typing import List
 from .d3net import D3_block
+from math import pi
 
 
 class ConvBlock(nn.Module):
@@ -72,7 +73,8 @@ class MultiHeadAttention(nn.Module):
         'd_model',
         'n_heads',
         'query_shape',
-        'memory_flange'
+        'memory_flange',
+        'pi'
     ]
 
     max_bins: int
@@ -80,6 +82,7 @@ class MultiHeadAttention(nn.Module):
     n_heads: int
     query_shape: int
     memory_flange: int
+    pi: float
 
     def __init__(self, in_channels, out_channels, d_model=32, n_heads=8, query_shape=24, memory_flange=8):
         super().__init__()
@@ -89,10 +92,13 @@ class MultiHeadAttention(nn.Module):
         self.n_heads = n_heads
         self.query_shape = query_shape
         self.memory_flange = memory_flange
+        self.pi = pi
 
         self.qkv_conv = nn.Conv2d(in_channels, d_model * 3, 3, padding=1)
         self.out_conv = nn.Conv2d(
             d_model, out_channels, 3, padding=1, bias=False)
+
+        self.pos_linear = nn.Linear(2, d_model * 3)
 
     def _pad_to_multiple_2d(self, x: torch.Tensor, query_shape: int):
         t = x.shape[-1]
@@ -121,6 +127,23 @@ class MultiHeadAttention(nn.Module):
                             self.memory_flange * 2, self.query_shape)
         unfold_v = v.unfold(-1, self.query_shape +
                             self.memory_flange * 2, self.query_shape)
+
+        # positional encoding
+        freqs = unfold_q.shape[3]
+        times = self.query_shape + self.memory_flange * 2
+        pos = torch.exp(
+            (torch.arange(freqs, dtype=q.dtype, device=q.device).unsqueeze(1) / freqs +
+             torch.arange(times, dtype=q.dtype, device=q.device) / times) * self.pi * 1j
+        )
+        pos_emb = self.pos_linear(torch.view_as_real(pos)).permute(2, 0, 1)
+        pos_emb = pos_emb.reshape(self.n_heads, -1, freqs, times)
+        q_pos, k_pos, v_pos = pos_emb.chunk(3, 1)
+        q_pos = q_pos[..., self.memory_flange:-self.memory_flange]
+
+        unfold_q = unfold_q + q_pos.unsqueeze(-2)
+        unfold_v = unfold_v + v_pos.unsqueeze(-2)
+        unfold_k = torch.where(unfold_k.abs().sum(
+            2, keepdim=True) > 0, unfold_k + k_pos.unsqueeze(-2), unfold_k)
 
         # new_stride = unfold_q.stride()
         # unfold_k = torch.as_strided(k, new_shape, new_stride)
