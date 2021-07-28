@@ -158,7 +158,7 @@ class MultiHeadAttention(nn.Module):
             unfold_q.shape[0], -1, k_depth_per_head)
 
         bias = (unfold_k.abs().sum(-2, keepdim=True)
-                == 0).to(unfold_k.dtype) * -1e-9
+                == 0).to(unfold_k.dtype) * -1e9
 
         logits = unfold_q @ unfold_k + bias
         weights = logits.softmax(-1)
