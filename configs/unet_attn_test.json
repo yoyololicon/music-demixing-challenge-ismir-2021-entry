@@ -23,8 +23,8 @@
             "type": "FastMUSDB",
             "args": {
                 "root": "~/Datasets/musdb18hq/",
-                "subsets": "test",
-                "split": null,
+                "subsets": "train",
+                "split": "valid",
                 "seq_duration": 11.88
             }
         }
@@ -36,7 +36,7 @@
         }
     },
     "loss": {
-        "type": "MDLoss",
+        "type": "CLoss",
         "args": {
             "mcoeff": 10,
             "n_fft": 4096,
@@ -58,13 +58,13 @@
             "drop_last": true,
             "num_workers": 2,
             "prefetch_factor": 2,
-            "pin_memory": true
+            "pin_memory": false
         },
         "valid": {
             "batch_size": 1,
             "num_workers": 2,
             "prefetch_factor": 2,
-            "pin_memory": true
+            "pin_memory": false
         }
     },
     "trainer": {
@@ -77,6 +77,9 @@
         "val_epoch_length": null,
         "validate_every": 1,
         "targets": [
+            "drums",
+            "bass",
+            "other",
             "vocals"
         ],
         "n_fft": 4096,

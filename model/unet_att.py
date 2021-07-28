@@ -241,7 +241,7 @@ class UNetAttn(nn.Module):
                                concat_channels, 5, 2, 2, bias=False),
             nn.BatchNorm2d(concat_channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(concat_channels, 2, 3, padding=2, dilation=2)
+            nn.Conv2d(concat_channels, 8, 3, padding=2, dilation=2)
         )
 
     def forward(self, spec):
@@ -269,6 +269,8 @@ class UNetAttn(nn.Module):
 
         x = F.pad(x, [0, spec.shape[3] - x.shape[3], 0,
                       spec.shape[2] - x.shape[2]], value=0.25)
+        x = x.view(x.shape[0], 4, 2, x.shape[2], x.shape[3])
+
         return x
 
 

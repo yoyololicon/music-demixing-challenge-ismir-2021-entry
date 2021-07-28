@@ -362,7 +362,12 @@ if args.checkpoint:
     Checkpoint.load_objects(to_load=to_save, checkpoint=checkpoint)
 
 if args.weights:
-    model.load_state_dict(torch.load(args.weights, map_location=device))
+    weights = torch.load(args.weights, map_location='cpu')
+    try:
+        weights = weights['model']
+    except:
+        pass
+    model.load_state_dict(weights, strict=False)
 
 trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
