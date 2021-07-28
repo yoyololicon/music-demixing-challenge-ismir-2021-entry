@@ -3,6 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 from typing import List
 from .d3net import D3_block
+from .positional_encoding.positional_encodings import PositionalEncodingPermute2D
 from math import pi
 
 
@@ -98,7 +99,7 @@ class MultiHeadAttention(nn.Module):
         self.out_conv = nn.Conv2d(
             d_model, out_channels, 3, padding=1, bias=False)
 
-        self.pos_linear = nn.Linear(2, d_model * 3)
+        self.pos_enc = PositionalEncodingPermute2D(in_channels)
 
     def _pad_to_multiple_2d(self, x: torch.Tensor, query_shape: int):
         t = x.shape[-1]
@@ -131,13 +132,11 @@ class MultiHeadAttention(nn.Module):
         # positional encoding
         freqs = unfold_q.shape[3]
         times = self.query_shape + self.memory_flange * 2
-        pos = torch.exp(
-            (torch.arange(freqs, dtype=q.dtype, device=q.device).unsqueeze(1) / freqs +
-             torch.arange(times, dtype=q.dtype, device=q.device) / times) * self.pi * 1j
-        )
-        pos_emb = self.pos_linear(torch.view_as_real(pos)).permute(2, 0, 1)
-        pos_emb = pos_emb.reshape(self.n_heads, -1, freqs, times)
-        q_pos, k_pos, v_pos = pos_emb.chunk(3, 1)
+        pos_emb = self.pos_enc(torch.zeros(1, x.shape[1], freqs, times,
+                                           dtype=q.dtype, device=q.device))
+        pos_emb = self.qkv_conv(pos_emb) - self.qkv_conv.bias[:, None, None]
+        q_pos, k_pos, v_pos = pos_emb.view(
+            self.n_heads, -1, freqs, times).chunk(3, 1)
         q_pos = q_pos[..., self.memory_flange:-self.memory_flange]
 
         unfold_q = unfold_q + q_pos.unsqueeze(-2)

@@ -1,3 +1,6 @@
 [submodule "sync_batchnorm"]
 	path = sync_batchnorm
 	url = https://github.com/vacancy/Synchronized-BatchNorm-PyTorch
+[submodule "model/positional_encoding"]
+	path = model/positional_encoding
+	url = https://github.com/tatp22/multidim-positional-encoding
