@@ -1,10 +1,24 @@
 import torch
 from torch import nn
+from torch import Tensor
 import torch.nn.functional as F
 from typing import List
 from .d3net import D3_block
 from .positional_encoding.positional_encodings import PositionalEncodingPermute2D
 from math import pi
+
+
+class Conv2dBias(nn.Conv2d):
+    bias: Tensor
+
+    def __init__(self,
+                 in_channels: int,
+                 out_channels: int,
+                 kernel_size: int,
+                 stride: int = 1,
+                 padding: int = 0) -> None:
+        super().__init__(in_channels, out_channels, kernel_size,
+                         stride=stride, padding=padding, bias=True)
 
 
 class ConvBlock(nn.Module):
@@ -95,7 +109,7 @@ class MultiHeadAttention(nn.Module):
         self.memory_flange = memory_flange
         self.pi = pi
 
-        self.qkv_conv = nn.Conv2d(in_channels, d_model * 3, 3, padding=1)
+        self.qkv_conv = Conv2dBias(in_channels, d_model * 3, 3, padding=1)
         self.out_conv = nn.Conv2d(
             d_model, out_channels, 3, padding=1, bias=False)
 
