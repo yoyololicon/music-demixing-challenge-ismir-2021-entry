@@ -63,6 +63,8 @@ class SDR(torch.nn.Module):
         return torch.einsum(self.expr, x, y)
 
     def forward(self, estimates, references):
+        if estimates.dtype != references.dtype:
+            estimates = estimates.to(references.dtype)
         length = min(references.shape[-1], estimates.shape[-1])
         references = references[..., :length].reshape(references.shape[0], -1)
         estimates = estimates[..., :length].reshape(estimates.shape[0], -1)
@@ -86,6 +88,25 @@ class WaveGlowLoss(torch.nn.Module):
         loss = 0.5 * z @ z / self.sigma2 - logdet.sum()
         loss = loss / z.numel()
         return loss, {}
+
+
+class CL1Loss(_TLoss):
+    def _core_loss(self, pred, gt, mix):
+        gt = gt[..., :pred.shape[-1]]
+        loss = []
+        for c in chain(combinations(range(4), 1), combinations(range(4), 2), combinations(range(4), 3)):
+            x = sum([pred[:, i] for i in c])
+            y = sum([gt[:, i] for i in c])
+            loss.append(F.l1_loss(x, y))
+
+        # All 14 Combination Losses (4C1 + 4C2 + 4C3)
+        loss_l1 = sum(loss) / len(loss)
+        return loss_l1, {}
+
+
+class L1Loss(_TLoss):
+    def _core_loss(self, pred, gt, mix):
+        return F.l1_loss(pred, gt[..., :pred.shape[-1]]), {}
 
 
 class CLoss(_FLoss):

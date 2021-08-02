@@ -20,6 +20,11 @@ model = get_instance(module_arch, config['arch'])
 model.load_state_dict(checkpoint['model'])
 model.eval()
 
+iteration = checkpoint['trainer']['iteration']
+epoch_length = checkpoint['trainer']['epoch_length']
+current_epoch = iteration // epoch_length
+print(f'trained epochs: {current_epoch}')
+
 jitted = torch.jit.script(model)
 print(jitted.code)
 jitted.save(args.jit_file)

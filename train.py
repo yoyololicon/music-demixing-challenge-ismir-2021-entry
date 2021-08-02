@@ -52,7 +52,8 @@ else:
 # define data augmentation transformss
 cpu_trsfm = Compose([
     module_transform.RandomGain(),
-    module_transform.RandomSwapLR()
+    module_transform.RandomSwapLR(),
+    module_transform.RandomFlipPhase()
 ])
 
 # your device transforms needs to handle with batches
@@ -260,7 +261,7 @@ tb_logger.attach_output_handler(
 )
 tb_logger.attach(
     trainer,
-    event_name=Events.EPOCH_COMPLETED,
+    event_name=Events.EPOCH_COMPLETED(every=validate_every),
     log_handler=WeightsHistHandler(model)
 )
 tb_logger.attach_opt_params_handler(
@@ -340,7 +341,7 @@ def predict_samples(engine):
         x = torch.from_numpy(x)
         tb_logger.writer.add_audio('mixture', x.t(), engine.state.epoch)
 
-        xpred = _predict_core(x.to(device)).cpu().clip(-1, 1)
+        xpred = _predict_core(x.to(device)).cpu().float().clip(-1, 1)
 
         if len(targets_idx) > 1:
             xpred = xpred.transpose(1, 2)
@@ -359,10 +360,22 @@ trainer.add_event_handler(Events.EPOCH_COMPLETED(
 
 if args.checkpoint:
     checkpoint = torch.load(args.checkpoint, map_location='cpu')
+    iteration = checkpoint['trainer']['iteration']
+    epoch_length = checkpoint['trainer']['epoch_length']
+    current_epoch = iteration // epoch_length
+    epoch_length = len(train_loader)
+    iteration = current_epoch * epoch_length
+    checkpoint['trainer']['iteration'] = iteration
+    checkpoint['trainer']['epoch_length'] = epoch_length
     Checkpoint.load_objects(to_load=to_save, checkpoint=checkpoint)
 
 if args.weights:
-    model.load_state_dict(torch.load(args.weights, map_location=device))
+    weights = torch.load(args.weights, map_location='cpu')
+    try:
+        weights = weights['model']
+    except:
+        pass
+    model.load_state_dict(weights, strict=False)
 
 trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
