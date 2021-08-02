@@ -12,7 +12,7 @@
             "args": {
                 "root": "~/Datasets/musdb18hq/",
                 "subsets": "train",
-                "split": null,
+                "split": "train",
                 "seq_duration": 11.88,
                 "samples_per_track": 32,
                 "random": true,
@@ -23,8 +23,8 @@
             "type": "FastMUSDB",
             "args": {
                 "root": "~/Datasets/musdb18hq/",
-                "subsets": "test",
-                "split": null,
+                "subsets": "train",
+                "split": "valid",
                 "seq_duration": 11.88
             }
         }
@@ -77,7 +77,10 @@
         "val_epoch_length": null,
         "validate_every": 1,
         "targets": [
-            "vocals"
+            "vocals",
+            "other",
+            "bass",
+            "drums"
         ],
         "n_fft": 4096,
         "hop_length": 1024,
