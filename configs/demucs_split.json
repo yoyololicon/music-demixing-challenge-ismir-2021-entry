@@ -12,7 +12,7 @@
             "args": {
                 "root": "~/Datasets/musdb18hq/",
                 "subsets": "train",
-                "split": null,
+                "split": "train",
                 "seq_duration": 10,
                 "samples_per_track": 150,
                 "random": true,
