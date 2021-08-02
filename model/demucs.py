@@ -256,12 +256,6 @@ class DemucsSplit(nn.Module):
 
         for decode, pre_dec, conv1x1 in zip(self.decoder, self.dec_pre_convs, self.convs_1x1):
             skip = saved.pop()
-            # diff = skip.shape[2] - x.shape[2]
-
-            # if diff > 0:
-            #     l_pad = diff // 2
-            #     r_pad = diff - l_pad
-            #     x = F.pad(x, [l_pad, r_pad])
 
             x = pre_dec(x) + conv1x1(skip[..., :x.shape[2]])
             a, b = x.view(x.shape[0], 4, -1, x.shape[2]).chunk(2, 2)
@@ -270,13 +264,6 @@ class DemucsSplit(nn.Module):
 
         if hasattr(self, 'down_sample'):
             x = self.down_sample(x)
-
-        # diff = length - x.shape[2]
-
-        # if diff > 0:
-        #     l_pad = diff // 2
-        #     r_pad = diff - l_pad
-        #     x = F.pad(x, [l_pad, r_pad])
 
         x = destandardize(x, mu, std)
         x = x.view(-1, 4, 2, x.size(-1))
