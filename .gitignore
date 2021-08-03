@@ -1,5 +1,6 @@
 .vscode/settings.json
 *.pyc
+runs/
 estimates/
 *tfevents.*
 saved/

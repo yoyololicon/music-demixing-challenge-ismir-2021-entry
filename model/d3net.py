@@ -10,6 +10,18 @@ class _Base(nn.Module):
 
 
 class D2_block(_Base):
+    __constants__ = [
+        'in_channels',
+        'k',
+        'L',
+        'last_N',
+    ]
+
+    in_channels: int
+    k: int
+    L: int
+    last_N: int
+
     def __init__(self,
                  in_channels,
                  k,
@@ -23,50 +35,45 @@ class D2_block(_Base):
         self.last_N = last_n_layers
 
         self.conv_layers = nn.ModuleList()
+        self.bn_layers = nn.ModuleList()
 
         for i in range(L):
-            if i:
-                self.conv_layers.append(
-                    nn.Sequential(
-                        nn.BatchNorm2d(k),
-                        nn.ReLU(inplace=True),
-                        nn.Conv2d(
-                            k,
-                            k * (L - i),
-                            3,
-                            padding=2 ** i,
-                            dilation=2 ** i,
-                            bias=False
-                        )
-                    )
+            self.conv_layers.append(
+                nn.Conv2d(
+                    k if i > 0 else in_channels,
+                    k * (L - i),
+                    3,
+                    padding=2 ** i,
+                    dilation=2 ** i,
+                    bias=False
                 )
-            else:
-                self.conv_layers.append(
-                    nn.Conv2d(
-                        in_channels,
-                        k * L,
-                        3,
-                        padding=2 ** i,
-                        dilation=2 ** i,
-                        bias=False
-                    )
+            )
+
+            self.bn_layers.append(
+                nn.Sequential(
+                    nn.BatchNorm2d(k),
+                    nn.ReLU(inplace=True)
                 )
+            )
 
     def get_output_channels(self):
         return self.k * min(self.L, self.last_N)
 
     def forward(self, input: torch.Tensor):
         # the input should be already BN + ReLU before
-        x = self.conv_layers[0](input)
-        input, *skips = x.chunk(self.L, 1)
-
-        outputs = [input]
-        for i in range(1, self.L):
-            input, * \
-                tmp = self.conv_layers[i](input).chunk(self.L - i, 1)
+        outputs = []
+        skips = []
+        for i, (conv, bn) in enumerate(zip(self.conv_layers, self.bn_layers)):
+            tmp = conv(input).chunk(self.L - i, 1)
+            input = tmp[0]
+            tmp = tmp[1:]
+            if i > 0:
+                input = input + skips.pop(0)
+                skips = [s + t for s, t in zip(skips, tmp)]
+            else:
+                skips = list(tmp)
+            input = bn(input)
             outputs.append(input)
-            input = input + skips.pop(0)
-            skips = [s + t for s, t in zip(skips, tmp)]
 
         assert len(skips) == 0
         if self.last_N > 1 and len(outputs) > 1:
@@ -82,18 +89,9 @@ class D3_block(_Base):
                  **kwargs):
         super().__init__()
         self.in_channels = in_channels
-
-        self.bn_layers = nn.ModuleList()
         self.d2_layers = nn.ModuleList()
-
         concat_channels = in_channels
         for i in range(M):
-            self.bn_layers.append(
-                nn.Sequential(
-                    nn.BatchNorm2d(concat_channels),
-                    nn.ReLU(inplace=True)
-                )
-            )
             self.d2_layers.append(
                 D2_block(in_channels, *args, **kwargs)
             )
@@ -105,12 +103,9 @@ class D3_block(_Base):
 
     def forward(self, input):
         raw_inputs = [input]
-        bn_inputs = []
-        for bn, d2 in zip(self.bn_layers, self.d2_layers):
-            bn_input = bn(input)
-            bn_inputs.append(bn_input)
-            input = d2(torch.cat(bn_inputs, 1) if len(
-                bn_inputs) > 1 else bn_input)
+        for d2 in self.d2_layers:
+            input = d2(torch.cat(raw_inputs, 1) if len(
+                raw_inputs) > 1 else input)
             raw_inputs.append(input)
         return torch.cat(raw_inputs, 1)
 
@@ -177,7 +172,7 @@ class UNet(_Base):
 
         for layer, ts, sk in zip(self.up_layers, self.tas_layers, skips[::-1]):
             x = ts(x)
-            #x = x.repeat_interleave(2, 2).repeat_interleave(2, 3)
+            # x = x.repeat_interleave(2, 2).repeat_interleave(2, 3)
             x = F.conv_transpose2d(x, self.tas_kernel.expand(
                 x.shape[1], -1, -1, -1), stride=2, groups=x.shape[1])
             x = layer(torch.cat([x[..., :sk.shape[2], :sk.shape[3]], sk], 1))
@@ -295,13 +290,13 @@ def get_vocals_model(last_n_layers=1):
 if __name__ == "__main__":
     m = get_vocals_model().cuda()  # .half()
     # print(m)
-    #torch.save(m, 'model_size_test.pth')
+    # torch.save(m, 'model_size_test.pth')
     x = torch.rand(1, 2, 2049, 256).cuda()  # .half()
     y = m(x)
     print(y.shape)
     exit(0)
     # m = D2_block(32, 6, 4, 4)
-    #m = D3_block(32, 2, k=13, L=5)
+    # m = D3_block(32, 2, k=13, L=5)
     m = UNet(
         32,
         [
