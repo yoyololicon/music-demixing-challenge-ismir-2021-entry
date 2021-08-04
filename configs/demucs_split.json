@@ -64,7 +64,7 @@
         }
     },
     "trainer": {
-        "epochs": 300,
+        "epochs": 340,
         "save_dir": "saved/",
         "log_dir": "runs/",
         "cum_steps": 21,
