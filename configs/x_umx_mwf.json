@@ -27,8 +27,8 @@
             "type": "FastMUSDB",
             "args": {
                 "root": "~/Datasets/musdb18hq/",
-                "subsets": "test",
-                "split": null,
+                "subsets": "train",
+                "split": "valid",
                 "seq_duration": 6.0
             }
         }
