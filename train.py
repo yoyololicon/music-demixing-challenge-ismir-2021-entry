@@ -21,6 +21,7 @@ import dataset as module_data
 import loss as module_loss
 import model as module_arch
 import transform as module_transform
+from sync_batchnorm import convert_model
 
 from utils import get_instance, CONFIG_SCHEMA, MWF
 
@@ -75,6 +76,7 @@ model = get_instance(module_arch, config['arch']).to(device)
 if device_ids:
     print(f'using multi-GPU')
     model = nn.DataParallel(model, device_ids=device_ids)
+    model = convert_model(model)
 
 try:
     optimizer = get_instance(optim, config['optimizer'], model.parameters())
