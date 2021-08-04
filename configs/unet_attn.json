@@ -12,7 +12,7 @@
             "args": {
                 "root": "~/Datasets/musdb18hq/",
                 "subsets": "train",
-                "split": "train",
+                "split": null,
                 "seq_duration": 11.88,
                 "samples_per_track": 32,
                 "random": true,
@@ -36,7 +36,7 @@
         }
     },
     "loss": {
-        "type": "MDLoss",
+        "type": "CLoss",
         "args": {
             "mcoeff": 10,
             "n_fft": 4096,
@@ -44,31 +44,33 @@
         }
     },
     "lr_scheduler": {
-        "type": "ReduceLROnPlateau",
+        "type": "MultiStepLR",
         "args": {
-            "factor": 0.3,
-            "patience": 80,
+            "milestones": [
+                560
+            ],
+            "gamma": 0.3,
             "verbose": true
         }
     },
     "data_loader": {
         "train": {
-            "batch_size": 1,
+            "batch_size": 16,
             "shuffle": true,
             "drop_last": true,
-            "num_workers": 2,
+            "num_workers": 4,
             "prefetch_factor": 2,
             "pin_memory": true
         },
         "valid": {
-            "batch_size": 1,
-            "num_workers": 2,
-            "prefetch_factor": 2,
+            "batch_size": 4,
+            "num_workers": 4,
+            "prefetch_factor": 8,
             "pin_memory": true
         }
     },
     "trainer": {
-        "epochs": 1000,
+        "epochs": 700,
         "save_dir": "saved/",
         "log_dir": "runs/",
         "cum_steps": 1,
