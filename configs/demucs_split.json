@@ -1,5 +1,5 @@
 {
-    "name": "Demucs",
+    "name": "DemucsSplit",
     "arch": {
         "type": "DemucsSplit",
         "args": {
@@ -12,7 +12,7 @@
             "args": {
                 "root": "~/Datasets/musdb18hq/",
                 "subsets": "train",
-                "split": "train",
+                "split": null,
                 "seq_duration": 10,
                 "samples_per_track": 150,
                 "random": true,
@@ -64,7 +64,7 @@
         }
     },
     "trainer": {
-        "epochs": 360,
+        "epochs": 300,
         "save_dir": "saved/",
         "log_dir": "runs/",
         "cum_steps": 21,
