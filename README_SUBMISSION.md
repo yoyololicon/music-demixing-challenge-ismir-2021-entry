@@ -13,17 +13,17 @@
 
 ## Model Summary
 
-Our final winning approach blends the outputs from three types of model, which are:
+Our final winning approach blends the outputs from three models, which are:
 
-1. A X-UMX model [2] which uses the weights from the official baseline as its initial weights, and we continue training it with a modified version of **Combinational Multi-Domain Loss** from [2]. The modifications include our own implementation of differentiable **Multichannel Wiener Filter** [3] just before computing the loss function, and calculating the frequency domain L2 loss using raw complex value.
+1. model 1: A X-UMX model [2] which is initialized with the weights of the official baseline, and is fine-tuned with a modified **Combinational Multi-Domain Loss** from [2]. In particular, we implement and apply a differentiable **Multichannel Wiener Filter** (MWF) [3] before the loss calculation, and compute the frequency-domain L2 loss with raw complex values.
 
-2. A U-Net which is similar to **Spleeter** [4], where all convolution layers are replaced by D3 Blocks from [5], and 2 layers of 2D local attention are applied at the bottle neck similar to [6].
+2. model 2: A U-Net which is similar to **Spleeter** [4], where all convolution layers are replaced by D3 Blocks from [5], and two layers of 2D local attention are applied at the bottleneck similar to [6].
 
-3. A modified version of **Demucs** [7], where the docoder part are replaced by 4 independent decoders, each corresponds to one source.
+3. model 3: A modified version of **Demucs** [7], where the original decoding module is replaced by four independent decoders, each of which corresponds to one source.
 
-In our early experiments we didn't observe any obvious overfitting, so we use the full musdb training set for all the models above, and stop training when the loss curve converge.
+We didn't encounter overfitting in our pilot experiments, so we used the full musdb training set for all the models above, and stopped training upon convergence of the loss function.
 
-The blending weights were set empirically:
+The weights of the three outputs are determined empirically:
 
 |         | Drums | Bass | Other | Vocals |
 |---------|-------|------|-------|--------|
@@ -31,7 +31,7 @@ The blending weights were set empirically:
 | model 2 | 0.2   | 0.17 | 0.5   | 0.4    |
 | model 3 | 0.6   | 0.73 | 0.5   | 0.4    |
 
-For spectrogram-based models (model 1 and 2), we use 1 iteration of multichannel wiener filtering before blending.
+For the spectrogram-based models (model 1 and 2), we apply MWF to the outputs with one iteration before the fusion.
 
 [1] Stöter, Fabian-Robert, et al. "Open-unmix-a reference implementation for
     music source separation." Journal of Open Source Software 4.41 (2019): 1667.
@@ -90,7 +90,7 @@ conda activate demixing
 
 ### Prepare Data
 
-Please download [musdb](https://zenodo.org/record/3338373), and edit the `"root"` parameters in all the json files list under `configs/` to where you put the dataset .
+Please download [musdb](https://zenodo.org/record/3338373), and edit the `"root"` parameters in all the json files listed under `configs/` to the path where you have the dataset.
 
 ### Training Model 1
 
@@ -100,7 +100,7 @@ First download the pre-trained model:
 wget https://zenodo.org/record/4740378/files/pretrained_xumx_musdb18HQ.pth
 ```
 
-Copy the weights to match our model:
+Copy the weights for initializing our model:
 
 ```commandline
 python xumx_weights_convert.py pretrained_xumx_musdb18HQ.pth xumx_weights.pth
@@ -112,7 +112,7 @@ Start training!
 python train.py configs/x_umx_mwf.json --weights xumx_weights.pth
 ```
 
-Checkpoints will be located at `saved/`.
+Checkpoints will be located under `saved/`.
 The config was set to run on a single RTX 3070.
 
 ### Training Model 2
@@ -122,8 +122,8 @@ The config was set to run on a single RTX 3070.
 python train.py configs/unet_attn.json --device_ids 0 1 2 3
 ```
 
-Checkpoints will be located at `saved/`.
-The config was set to run on 4 Tesla V100.
+Checkpoints will be located under `saved/`.
+The config was set to run on four Tesla V100.
 
 ### Training Model 3
 
@@ -132,7 +132,7 @@ The config was set to run on 4 Tesla V100.
 python train.py configs/demucs_split.json
 ```
 
-Checkpoints will be located at `saved/`.
+Checkpoints will be located under `saved/`.
 The config was set to run on a single RTX 3070, using gradient accumulation and mixed precision training.
 
 ### Tensorboard Logging
@@ -145,7 +145,7 @@ tesnorboard --logdir runs/
 
 ### Inference
 
-After completing [How to reproduce the submission](#how-to-reproduce-the-submission), replace the jitted model listed under `your-cloned-submission-repo-dir/models/*` with the newly trained checkpoints.
+After completing [How to reproduce the submission](#how-to-reproduce-the-submission), replace the jitted model listed under `your-cloned-submission-repo-dir/models/*` with the saved checkpoints.
 
 ```commandline
 python jit_convert.py configs/x_umx_mwf.json saved/CrossNet Open-Unmix_checkpoint_XXX.pt your-cloned-submission-repo-dir/models/xumx_mwf_v4.pth
