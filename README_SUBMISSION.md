@@ -18,7 +18,7 @@
 
 Our final winning approach is blending the outputs from three types of model, which are:
 
-1. A X-UMX model [2] using the weights from the official baseline as initial weights, continue training with a modified version of **Combinational Multi-Domain Loss** from [2]. The modifications including running our own implementation of differentiable **Multi-Channel Wiener Filter** [3] just before computing the loss function, and calculating the frequency domain L2 loss using raw complex value.
+1. A X-UMX model [2] using the weights from the official baseline as initial weights, continue training with a modified version of **Combinational Multi-Domain Loss** from [2]. The modifications including running our own implementation of differentiable **MultiChannel Wiener Filter** [3] just before computing the loss function, and calculating the frequency domain L2 loss using raw complex value.
 
 2. A U-Net which structure is similar to **Spleeter** [4], with all convolution layers being replaced by D3 Blocks from [5], and apply 2 layers of 2D local attention at the bottle neck similar to [6].
 
@@ -59,7 +59,58 @@ Please describe here how your submission can be reproduced.
 
 ## How to reproduce the training
 
-Please describe here how your model could be trained.
+### Install Requirements / Build Virtual Environment
+
+We recommend using conda.
+
+```commandline
+conda env create -f environment.yml
+conda activate demixing
+```
+
+### Training Model 1
+
+First download the pre-trained model:
+
+```commandline
+wget https://zenodo.org/record/4740378/files/pretrained_xumx_musdb18HQ.pth
+```
+
+Transform the weights to match our model:
+
+```commandline
+python xumx_weights_convert.py pretrained_xumx_musdb18HQ.pth xumx_weights.pth
+```
+
+Start training!
+
+```commandline
+python train.py configs x_umx_mwf.json --weights xumx_weights.pth
+```
+
+Checkpoints will be located at `saved/`.
+The training config was set to run on a single RTX 3070.
+
+### Training Model 2
+
+
+```commandline
+python train.py configs/unet_attn.json --device_ids 0 1 2 3
+```
+
+Checkpoints will be located at `saved/`.
+The training config was set to run on 4 Tesla V100.
+
+### Training Model 3
+
+
+```commandline
+python train.py configs/demucs_split.json
+```
+
+Checkpoints will be located at `saved/`.
+The training config was set to run on a single RTX 3070, using gradient accumulation and mixed precision training.
+
 
 # License
 
