@@ -55,7 +55,32 @@ For spectrogram-based models (model 1 and 2), we use 1 iteration of multichannel
 
 ## How to reproduce the submission
 
-Please describe here how your submission can be reproduced.
+Our submission can be reproduced by:
+
+1. Clone our submission [repo](https://gitlab.aicrowd.com/yoyololicon/music-demixing-challenge-starter-kit).
+
+
+```commandline
+git clone http://gitlab.aicrowd.com/yoyololicon/music-demixing-challenge-starter-kit.git
+cd music-demixing-challenge-starter-kit/
+git pull && git lfs pull
+```
+
+2. Checkout to the winning submission tag.
+
+```commandline
+
+git checkout submission-fusion-3model-4
+```
+
+3. Install requirements.
+
+```commandline
+pip install requirements.txt
+```
+
+4. Use `python predict.py` to generate prediction on test data. Other steps can be infer from [official starter kit](https://github.com/AIcrowd/music-demixing-challenge-starter-kit).
+
 
 ## How to reproduce the training
 
@@ -68,6 +93,10 @@ conda env create -f environment.yml
 conda activate demixing
 ```
 
+### Prepare Data
+
+Please download [musdb](https://zenodo.org/record/3338373), and edit the `"root"` parameter in all the json files list under `configs/` to where you put the dataset .
+
 ### Training Model 1
 
 First download the pre-trained model:
@@ -76,7 +105,7 @@ First download the pre-trained model:
 wget https://zenodo.org/record/4740378/files/pretrained_xumx_musdb18HQ.pth
 ```
 
-Transform the weights to match our model:
+Copy the weights to match our model:
 
 ```commandline
 python xumx_weights_convert.py pretrained_xumx_musdb18HQ.pth xumx_weights.pth
@@ -85,11 +114,11 @@ python xumx_weights_convert.py pretrained_xumx_musdb18HQ.pth xumx_weights.pth
 Start training!
 
 ```commandline
-python train.py configs x_umx_mwf.json --weights xumx_weights.pth
+python train.py configs/x_umx_mwf.json --weights xumx_weights.pth
 ```
 
 Checkpoints will be located at `saved/`.
-The training config was set to run on a single RTX 3070.
+The config was set to run on a single RTX 3070.
 
 ### Training Model 2
 
@@ -99,7 +128,7 @@ python train.py configs/unet_attn.json --device_ids 0 1 2 3
 ```
 
 Checkpoints will be located at `saved/`.
-The training config was set to run on 4 Tesla V100.
+The config was set to run on 4 Tesla V100.
 
 ### Training Model 3
 
@@ -109,8 +138,27 @@ python train.py configs/demucs_split.json
 ```
 
 Checkpoints will be located at `saved/`.
-The training config was set to run on a single RTX 3070, using gradient accumulation and mixed precision training.
+The config was set to run on a single RTX 3070, using gradient accumulation and mixed precision training.
 
+### Tensorboard Logging
+
+You can monitor the training process using tensorboard:
+
+```commandline
+tesnorboard --logdir runs/
+```
+
+### Inference
+
+After complete [How to reproduce the submission](#how-to-reproduce-the-submission), replace the jitted model listed under `your-cloned-submission-repo-dir/models/*` with the newly trained checkpoints.
+
+```commandline
+python jit_convert.py configs/x_umx_mwf.json saved/CrossNet Open-Unmix_checkpoint_XXX.pt your-cloned-submission-repo-dir/models/xumx_mwf_v4.pth
+
+python jit_convert.py configs/unet_attn.json saved/UNet Attention_checkpoint_XXX.pt your-cloned-submission-repo-dir/models/unet_test.pth
+
+python jit_convert.py configs/demucs_split.json saved/DemucsSplit_checkpoint_XXX.pt your-cloned-submission-repo-dir/models/demucs.pth
+```
 
 # License
 
