@@ -9,6 +9,7 @@ import argparse
 import json
 from datetime import datetime
 import os
+from inspect import signature
 from jsonschema import validate
 from ignite.engine import Engine, Events
 from ignite.metrics import RunningAverage, Average
@@ -85,6 +86,8 @@ except AttributeError:
         torch_optimizer, config['optimizer'], model.parameters())
 
 scheduler = get_instance(optim.lr_scheduler, config['lr_scheduler'], optimizer)
+scheduler_step_sig = signature(scheduler.step)
+isReduceLROnPlateau = 'metrics' in scheduler_step_sig.parameters
 
 criterion = get_instance(module_loss, config['loss']).to(device)
 
@@ -226,7 +229,7 @@ def print_logs(engine, dataloader):
     metrics = evaluator.state.metrics
     avg_loss = metrics['loss']
     avg_sdr = metrics['avg_sdr']
-    scheduler.step(avg_loss)
+    scheduler.step(avg_loss if isReduceLROnPlateau else None)
 
     output_str = f'Evaluater Results - Epoch {engine.state.epoch} - Avg loss: {avg_loss:.2f}'
     for k in extra_monitor:
