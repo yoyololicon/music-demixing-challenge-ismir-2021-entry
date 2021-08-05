@@ -54,7 +54,7 @@ For spectrogram-based models (model 1 and 2), we use 1 iteration of multichannel
 
 Our submission can be reproduced by:
 
-1. Clone our submission [repo](https://gitlab.aicrowd.com/yoyololicon/music-demixing-challenge-starter-kit).
+1. Clone our submission [repo](https://gitlab.aicrowd.com/yoyololicon/music-demixing-challenge-starter-kit).  Make sure you have installed `git-lfs` before proceeding.
 
 
 ```commandline
@@ -75,7 +75,7 @@ git checkout submission-fusion-3model-4
 pip install -r requirements.txt
 ```
 
-4. Use `python predict.py` to generate prediction on test data. The remaining steps are same as [official starter kit](https://github.com/AIcrowd/music-demixing-challenge-starter-kit).
+4. Use `python predict.py` to generate predictions on test data. The remaining steps are same as [official starter kit](https://github.com/AIcrowd/music-demixing-challenge-starter-kit).
 
 
 ## How to reproduce the training
@@ -91,7 +91,7 @@ conda activate demixing
 
 ### Prepare Data
 
-Please download [musdb](https://zenodo.org/record/3338373), and edit the `"root"` parameter in all the json files list under `configs/` to where you put the dataset .
+Please download [musdb](https://zenodo.org/record/3338373), and edit the `"root"` parameters in all the json files list under `configs/` to where you put the dataset .
 
 ### Training Model 1
 
@@ -146,7 +146,7 @@ tesnorboard --logdir runs/
 
 ### Inference
 
-After complete [How to reproduce the submission](#how-to-reproduce-the-submission), replace the jitted model listed under `your-cloned-submission-repo-dir/models/*` with the newly trained checkpoints.
+After completing [How to reproduce the submission](#how-to-reproduce-the-submission), replace the jitted model listed under `your-cloned-submission-repo-dir/models/*` with the newly trained checkpoints.
 
 ```commandline
 python jit_convert.py configs/x_umx_mwf.json saved/CrossNet Open-Unmix_checkpoint_XXX.pt your-cloned-submission-repo-dir/models/xumx_mwf_v4.pth
