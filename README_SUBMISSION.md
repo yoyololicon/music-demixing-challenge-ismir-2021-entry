@@ -1,6 +1,3 @@
-> Dear participants, for the final due diligence on your submission, please use the below README format to describe your submission. We also encourage you to add useful comments in your code to help streamline the review process.
-
-
 # Submission
 
 ## Submission Summary
@@ -69,7 +66,6 @@ git pull && git lfs pull
 2. Checkout to the winning submission tag.
 
 ```commandline
-
 git checkout submission-fusion-3model-4
 ```
 
