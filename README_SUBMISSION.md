@@ -71,7 +71,7 @@ git checkout submission-fusion-3model-4
 3. Install requirements.
 
 ```commandline
-pip install requirements.txt
+pip install -r requirements.txt
 ```
 
 4. Use `python predict.py` to generate prediction on test data. Other steps can be infer from [official starter kit](https://github.com/AIcrowd/music-demixing-challenge-starter-kit).
