@@ -54,13 +54,12 @@ For spectrogram-based models (model 1 and 2), we use 1 iteration of multichannel
 
 Our submission can be reproduced by:
 
-1. Clone our submission [repo](https://gitlab.aicrowd.com/yoyololicon/music-demixing-challenge-starter-kit).
+1. Clone our submission [repo](https://gitlab.aicrowd.com/yoyololicon/music-demixing-challenge-starter-kit). Make sure you have install `git-lfs` before proceed.
 
 
 ```commandline
 git clone http://gitlab.aicrowd.com/yoyololicon/music-demixing-challenge-starter-kit.git
 cd music-demixing-challenge-starter-kit/
-git pull && git lfs pull
 ```
 
 2. Checkout to the winning submission tag.
