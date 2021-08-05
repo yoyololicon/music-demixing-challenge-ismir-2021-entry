@@ -15,7 +15,7 @@
 
 Our final winning approach blends the outputs from three types of model, which are:
 
-1. A X-UMX model [2] which uses the weights from the official baseline as its initial weights, and we continue training it with a modified version of **Combinational Multi-Domain Loss** from [2]. The modifications include our own implementation of differentiable **MultiChannel Wiener Filter** [3] just before computing the loss function, and calculating the frequency domain L2 loss using raw complex value.
+1. A X-UMX model [2] which uses the weights from the official baseline as its initial weights, and we continue training it with a modified version of **Combinational Multi-Domain Loss** from [2]. The modifications include our own implementation of differentiable **Multichannel Wiener Filter** [3] just before computing the loss function, and calculating the frequency domain L2 loss using raw complex value.
 
 2. A U-Net which is similar to **Spleeter** [4], where all convolution layers are replaced by D3 Blocks from [5], and 2 layers of 2D local attention are applied at the bottle neck similar to [6].
 
@@ -60,7 +60,6 @@ Our submission can be reproduced by:
 ```commandline
 git clone http://gitlab.aicrowd.com/yoyololicon/music-demixing-challenge-starter-kit.git
 cd music-demixing-challenge-starter-kit/
-git pull && git lfs pull
 ```
 
 2. Checkout to the winning submission tag.
