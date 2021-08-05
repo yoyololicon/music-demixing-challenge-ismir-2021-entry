@@ -13,13 +13,13 @@
 
 ## Model Summary
 
-Our final winning approach is blending the outputs from three types of model, which are:
+Our final winning approach blends the outputs from three types of model, which are:
 
-1. A X-UMX model [2] using the weights from the official baseline as initial weights, continue training with a modified version of **Combinational Multi-Domain Loss** from [2]. The modifications including running our own implementation of differentiable **MultiChannel Wiener Filter** [3] just before computing the loss function, and calculating the frequency domain L2 loss using raw complex value.
+1. A X-UMX model [2] which uses the weights from the official baseline as its initial weights, and we continue training it with a modified version of **Combinational Multi-Domain Loss** from [2]. The modifications include our own implementation of differentiable **MultiChannel Wiener Filter** [3] just before computing the loss function, and calculating the frequency domain L2 loss using raw complex value.
 
-2. A U-Net which structure is similar to **Spleeter** [4], with all convolution layers being replaced by D3 Blocks from [5], and apply 2 layers of 2D local attention at the bottle neck similar to [6].
+2. A U-Net which is similar to **Spleeter** [4], where all convolution layers are replaced by D3 Blocks from [5], and 2 layers of 2D local attention are applied at the bottle neck similar to [6].
 
-3. A modified version of **Demucs** [7], with the docoder part being replaced by 4 independent decoders, each corresponding to one source.
+3. A modified version of **Demucs** [7], where the docoder part are replaced by 4 independent decoders, each corresponds to one source.
 
 In our early experiments we didn't observe any obvious overfitting, so we use the full musdb training set for all the models above, and stop training when the loss curve converge.
 
@@ -54,12 +54,13 @@ For spectrogram-based models (model 1 and 2), we use 1 iteration of multichannel
 
 Our submission can be reproduced by:
 
-1. Clone our submission [repo](https://gitlab.aicrowd.com/yoyololicon/music-demixing-challenge-starter-kit). Make sure you have install `git-lfs` before proceed.
+1. Clone our submission [repo](https://gitlab.aicrowd.com/yoyololicon/music-demixing-challenge-starter-kit).
 
 
 ```commandline
 git clone http://gitlab.aicrowd.com/yoyololicon/music-demixing-challenge-starter-kit.git
 cd music-demixing-challenge-starter-kit/
+git pull && git lfs pull
 ```
 
 2. Checkout to the winning submission tag.
@@ -74,7 +75,7 @@ git checkout submission-fusion-3model-4
 pip install -r requirements.txt
 ```
 
-4. Use `python predict.py` to generate prediction on test data. Other steps can be infer from [official starter kit](https://github.com/AIcrowd/music-demixing-challenge-starter-kit).
+4. Use `python predict.py` to generate prediction on test data. The remaining steps are same as [official starter kit](https://github.com/AIcrowd/music-demixing-challenge-starter-kit).
 
 
 ## How to reproduce the training
