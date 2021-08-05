@@ -5,67 +5,6 @@ from typing import List
 from .d3net import D3_block
 
 
-class ConvBlock(nn.Module):
-
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, dropout=0.4):
-        super().__init__()
-
-        self.convs = nn.Sequential(
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(in_channels),
-            nn.Dropout2d(dropout),
-            nn.Conv2d(in_channels, out_channels, kernel_size,
-                      stride=stride, padding=kernel_size // 2),
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(out_channels),
-            nn.Dropout2d(dropout),
-            nn.Conv2d(out_channels, out_channels, kernel_size,
-                      stride=1, padding=kernel_size // 2),
-        )
-
-        if stride != 1:
-            setattr(self, "skip", nn.Conv2d(
-                in_channels, out_channels, 1, stride=stride))
-        else:
-            setattr(self, "skip", None)
-
-    def forward(self, x):
-        out = self.convs(x)
-        if self.skip is not None:
-            out += self.skip(x)
-        return out
-
-
-class ConvTransposeBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, dropout=0.4):
-        super().__init__()
-
-        self.convs = nn.Sequential(
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(in_channels),
-            nn.Dropout2d(dropout),
-            nn.Conv2d(in_channels, out_channels, kernel_size,
-                      stride=1, padding=kernel_size // 2),
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(out_channels),
-            nn.Dropout2d(dropout),
-            nn.ConvTranspose2d(out_channels, out_channels, kernel_size,
-                               stride=stride, padding=kernel_size // 2),
-        )
-
-        if stride != 1:
-            setattr(self, "skip", nn.ConvTranspose2d(
-                in_channels, out_channels, 1, stride=stride))
-        else:
-            setattr(self, "skip", None)
-
-    def forward(self, x):
-        out = self.convs(x)
-        if self.skip is not None:
-            out += self.skip(x)
-        return out
-
-
 class MultiHeadAttention(nn.Module):
     __constants__ = [
         'out_channels',
