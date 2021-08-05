@@ -15,11 +15,11 @@
 
 Our final winning approach blends the outputs from three models, which are:
 
-1. model 1: A X-UMX model [2] which is initialized with the weights of the official baseline, and is fine-tuned with a modified **Combinational Multi-Domain Loss** from [2]. In particular, we implement and apply a differentiable **Multichannel Wiener Filter** (MWF) [3] before the loss calculation, and compute the frequency-domain L2 loss with raw complex values.
+1. model 1: A X-UMX model [1] which is initialized with the weights of the official baseline, and is fine-tuned with a modified **Combinational Multi-Domain Loss** from [1]. In particular, we implement and apply a differentiable **Multichannel Wiener Filter** (MWF) [2] before the loss calculation, and compute the frequency-domain L2 loss with raw complex values.
 
-2. model 2: A U-Net which is similar to **Spleeter** [4], where all convolution layers are replaced by D3 Blocks from [5], and two layers of 2D local attention are applied at the bottleneck similar to [6].
+2. model 2: A U-Net which is similar to **Spleeter** [3], where all convolution layers are replaced by D3 Blocks from [4], and two layers of 2D local attention are applied at the bottleneck similar to [5].
 
-3. model 3: A modified version of **Demucs** [7], where the original decoding module is replaced by four independent decoders, each of which corresponds to one source.
+3. model 3: A modified version of **Demucs** [6], where the original decoding module is replaced by four independent decoders, each of which corresponds to one source.
 
 We didn't encounter overfitting in our pilot experiments, so we used the full musdb training set for all the models above, and stopped training upon convergence of the loss function.
 
@@ -33,20 +33,17 @@ The weights of the three outputs are determined empirically:
 
 For the spectrogram-based models (model 1 and 2), we apply MWF to the outputs with one iteration before the fusion.
 
-[1] Stöter, Fabian-Robert, et al. "Open-unmix-a reference implementation for
-    music source separation." Journal of Open Source Software 4.41 (2019): 1667.
+[1] Sawata, Ryosuke, et al. "All for One and One for All: Improving Music Separation by Bridging Networks." ICASSP 2021-2021 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP). IEEE, 2021.
 
-[2] Sawata, Ryosuke, et al. "All for One and One for All: Improving Music Separation by Bridging Networks." ICASSP 2021-2021 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP). IEEE, 2021.
+[2] Antoine Liutkus, & Fabian-Robert Stöter. (2019). sigsep/norbert: First official Norbert release (v0.2.0). Zenodo. https://doi.org/10.5281/zenodo.3269749
 
-[3] Antoine Liutkus, & Fabian-Robert Stöter. (2019). sigsep/norbert: First official Norbert release (v0.2.0). Zenodo. https://doi.org/10.5281/zenodo.3269749
+[3] Hennequin, Romain, et al. "Spleeter: a fast and efficient music source separation tool with pre-trained models." Journal of Open Source Software 5.50 (2020): 2154.
 
-[4] Hennequin, Romain, et al. "Spleeter: a fast and efficient music source separation tool with pre-trained models." Journal of Open Source Software 5.50 (2020): 2154.
+[4] Takahashi, Naoya, and Yuki Mitsufuji. "D3net: Densely connected multidilated densenet for music source separation." arXiv preprint arXiv:2010.01733 (2020).
 
-[5] Takahashi, Naoya, and Yuki Mitsufuji. "D3net: Densely connected multidilated densenet for music source separation." arXiv preprint arXiv:2010.01733 (2020).
+[5] Wu, Yu-Te, Berlin Chen, and Li Su. "Multi-Instrument Automatic Music Transcription With Self-Attention-Based Instance Segmentation." IEEE/ACM Transactions on Audio, Speech, and Language Processing 28 (2020): 2796-2809.
 
-[6] Wu, Yu-Te, Berlin Chen, and Li Su. "Multi-Instrument Automatic Music Transcription With Self-Attention-Based Instance Segmentation." IEEE/ACM Transactions on Audio, Speech, and Language Processing 28 (2020): 2796-2809.
-
-[7] Défossez, Alexandre, et al. "Music source separation in the waveform domain." arXiv preprint arXiv:1911.13254 (2019).
+[6] Défossez, Alexandre, et al. "Music source separation in the waveform domain." arXiv preprint arXiv:1911.13254 (2019).
 
 # Reproduction
 
