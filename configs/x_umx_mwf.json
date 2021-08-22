@@ -27,8 +27,8 @@
             "type": "FastMUSDB",
             "args": {
                 "root": "~/Datasets/musdb18hq/",
-                "subsets": "test",
-                "split": null,
+                "subsets": "train",
+                "split": "valid",
                 "seq_duration": 6.0
             }
         }
@@ -50,10 +50,12 @@
         }
     },
     "lr_scheduler": {
-        "type": "ReduceLROnPlateau",
+        "type": "MultiStepLR",
         "args": {
-            "factor": 0.3,
-            "patience": 30,
+            "milestones": [
+                45
+            ],
+            "gamma": 0.3,
             "verbose": true
         }
     },
@@ -74,7 +76,7 @@
         }
     },
     "trainer": {
-        "epochs": 100,
+        "epochs": 70,
         "save_dir": "saved/",
         "log_dir": "runs/",
         "cum_steps": 1,

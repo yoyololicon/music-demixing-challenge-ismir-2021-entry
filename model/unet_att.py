@@ -5,67 +5,6 @@ from typing import List
 from .d3net import D3_block
 
 
-class ConvBlock(nn.Module):
-
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, dropout=0.4):
-        super().__init__()
-
-        self.convs = nn.Sequential(
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(in_channels),
-            nn.Dropout2d(dropout),
-            nn.Conv2d(in_channels, out_channels, kernel_size,
-                      stride=stride, padding=kernel_size // 2),
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(out_channels),
-            nn.Dropout2d(dropout),
-            nn.Conv2d(out_channels, out_channels, kernel_size,
-                      stride=1, padding=kernel_size // 2),
-        )
-
-        if stride != 1:
-            setattr(self, "skip", nn.Conv2d(
-                in_channels, out_channels, 1, stride=stride))
-        else:
-            setattr(self, "skip", None)
-
-    def forward(self, x):
-        out = self.convs(x)
-        if self.skip is not None:
-            out += self.skip(x)
-        return out
-
-
-class ConvTransposeBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, dropout=0.4):
-        super().__init__()
-
-        self.convs = nn.Sequential(
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(in_channels),
-            nn.Dropout2d(dropout),
-            nn.Conv2d(in_channels, out_channels, kernel_size,
-                      stride=1, padding=kernel_size // 2),
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(out_channels),
-            nn.Dropout2d(dropout),
-            nn.ConvTranspose2d(out_channels, out_channels, kernel_size,
-                               stride=stride, padding=kernel_size // 2),
-        )
-
-        if stride != 1:
-            setattr(self, "skip", nn.ConvTranspose2d(
-                in_channels, out_channels, 1, stride=stride))
-        else:
-            setattr(self, "skip", None)
-
-    def forward(self, x):
-        out = self.convs(x)
-        if self.skip is not None:
-            out += self.skip(x)
-        return out
-
-
 class MultiHeadAttention(nn.Module):
     __constants__ = [
         'out_channels',
@@ -122,10 +61,6 @@ class MultiHeadAttention(nn.Module):
         unfold_v = v.unfold(-1, self.query_shape +
                             self.memory_flange * 2, self.query_shape)
 
-        # new_stride = unfold_q.stride()
-        # unfold_k = torch.as_strided(k, new_shape, new_stride)
-        # unfold_v = torch.as_strided(v, new_shape, new_stride)
-
         unfold_q = unfold_q.permute(0, 1, 4, 3, 5, 2)
         tmp = unfold_q.shape
         unfold_q = unfold_q.reshape(
@@ -136,7 +71,9 @@ class MultiHeadAttention(nn.Module):
             unfold_q.shape[0], -1, k_depth_per_head)
 
         bias = (unfold_k.abs().sum(-2, keepdim=True)
-                == 0).to(unfold_k.dtype) * -1e9
+                == 0).to(unfold_k.dtype) * -1e-9
+        # correct value should be -1e9, we type this by accident and use it during the whole competition
+        # so just leave it what it was :)
 
         logits = unfold_q @ unfold_k + bias
         weights = logits.softmax(-1)
