@@ -1,15 +1,6 @@
-# Submission
+This repository contains the training code of our winning model at [Music Demixing Challenge 2021](https://www.aicrowd.com/challenges/music-demixing-challenge-ismir-2021) which got the 4th place on leaderboard A (6th in overall), and help us (*Kazane Ryo no Danna*) winned the bronze prize.  
 
-## Submission Summary
-
-* Submission ID: 151898
-* Submitter: yoyololicon
-* Final rank: 4th place on leaderboard A
-* Final scores on MDXDB21:
-
-  | SDR_song | SDR_bass | SDR_drums | SDR_other | SDR_vocals |
-  | :---:    | :---:    | :---:     | :---:     | :---:      |
-  | 6.649    | 6.993    | 7.018     | 4.901     | 7.686      |
+![](./images/mdx_leaderboard_A.png)
 
 ## Model Summary
 
@@ -44,34 +35,6 @@ For the spectrogram-based models (model 1 and 2), we apply MWF to the outputs wi
 [5] Wu, Yu-Te, Berlin Chen, and Li Su. "Multi-Instrument Automatic Music Transcription With Self-Attention-Based Instance Segmentation." IEEE/ACM Transactions on Audio, Speech, and Language Processing 28 (2020): 2796-2809.
 
 [6] Défossez, Alexandre, et al. "Music source separation in the waveform domain." arXiv preprint arXiv:1911.13254 (2019).
-
-# Reproduction
-
-## How to reproduce the submission
-
-Our submission can be reproduced by:
-
-1. Clone our submission [repo](https://gitlab.aicrowd.com/yoyololicon/music-demixing-challenge-starter-kit).  Make sure you have installed `git-lfs` before proceeding.
-
-
-```commandline
-git clone http://gitlab.aicrowd.com/yoyololicon/music-demixing-challenge-starter-kit.git
-cd music-demixing-challenge-starter-kit/
-```
-
-2. Checkout to the winning submission tag.
-
-```commandline
-git checkout submission-fusion-3model-4
-```
-
-3. Install requirements.
-
-```commandline
-pip install -r requirements.txt
-```
-
-4. Use `python predict.py` to generate predictions on test data. The remaining steps are same as [official starter kit](https://github.com/AIcrowd/music-demixing-challenge-starter-kit).
 
 
 ## How to reproduce the training
@@ -142,36 +105,9 @@ tesnorboard --logdir runs/
 
 ### Inference
 
-After completing [How to reproduce the submission](#how-to-reproduce-the-submission), replace the jitted model listed under `your-cloned-submission-repo-dir/models/*` with the saved checkpoints.
+I plan to make another repo for it, will comming soon.
 
-```commandline
-python jit_convert.py configs/x_umx_mwf.json saved/CrossNet Open-Unmix_checkpoint_XXX.pt your-cloned-submission-repo-dir/models/xumx_mwf_v4.pth
 
-python jit_convert.py configs/unet_attn.json saved/UNet Attention_checkpoint_XXX.pt your-cloned-submission-repo-dir/models/unet_test.pth
+## Additional Resources
 
-python jit_convert.py configs/demucs_split.json saved/DemucsSplit_checkpoint_XXX.pt your-cloned-submission-repo-dir/models/demucs.pth
-```
-
-# License
-
-MIT License
-
-Copyright (c) [2021] [Chin-Yun Yu]
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+* [Town Hall Presentation Slides](https://www.slideshare.net/ChinYunYu/mdx-challenge-2021-town-hall-presentation)
