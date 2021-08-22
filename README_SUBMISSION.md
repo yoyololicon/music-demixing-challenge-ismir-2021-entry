@@ -1,4 +1,4 @@
-This repository contains the training code of our winning model at [Music Demixing Challenge 2021](https://www.aicrowd.com/challenges/music-demixing-challenge-ismir-2021) which got the 4th place on leaderboard A (6th in overall), and help us (*Kazane Ryo no Danna*) winned the bronze prize.  
+This repository contains the training code of our winning model at [Music Demixing Challenge 2021](https://www.aicrowd.com/challenges/music-demixing-challenge-ismir-2021), which got the 4th place on leaderboard A (6th in overall), and help us (*Kazane Ryo no Danna*) winned the bronze prize.  
 
 ![](./images/mdx_leaderboard_A.png)
 
@@ -103,7 +103,7 @@ You can monitor the training process using tensorboard:
 tesnorboard --logdir runs/
 ```
 
-### Inference
+## Inference
 
 I plan to make another repo for it, will comming soon.
 
