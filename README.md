@@ -105,7 +105,17 @@ tesnorboard --logdir runs/
 
 ## Inference
 
-I plan to make another repo for it, will comming soon.
+First make sure you installed [danna-sep](https://github.com/yoyololicon/danna-sep). Then convert your checkpoints into jit scripts and replace the files at `DANNA_CHECKPOINTS`:
+
+```commandline
+python jit_convert.py configs/x_umx_mwf.json saved/CrossNet\ Open-Unmix_checkpoint_XXX.pt $DANNA_CHECKPOINTS/xumx_mwf_v4.pth
+
+python jit_convert.py configs/unet_attn.json saved/UNet\ Attention_checkpoint_XXX.pt $DANNA_CHECKPOINTS/unet_test.pth
+
+python jit_convert.py configs/demucs_split.json saved/DemucsSplit_checkpoint_XXX.pt $DANNA_CHECKPOINTS/demucs.pth
+
+```
+Now you can use `danna-sep` to separate you favorite music and see how it works!
 
 
 ## Additional Resources
