@@ -105,7 +105,7 @@ tesnorboard --logdir runs/
 
 ## Inference
 
-First make sure you installed [danna-sep](https://github.com/yoyololicon/danna-sep). Then convert your checkpoints into jit scripts and replace the files at `DANNA_CHECKPOINTS`:
+First make sure you installed [danna-sep](https://github.com/yoyololicon/danna-sep). Then convert your checkpoints into jit scripts and replace the files under `DANNA_CHECKPOINTS`:
 
 ```commandline
 python jit_convert.py configs/x_umx_mwf.json saved/CrossNet\ Open-Unmix_checkpoint_XXX.pt $DANNA_CHECKPOINTS/xumx_mwf_v4.pth
@@ -121,3 +121,5 @@ Now you can use `danna-sep` to separate you favorite music and see how it works!
 ## Additional Resources
 
 * [Town Hall Presentation Slides](https://www.slideshare.net/ChinYunYu/mdx-challenge-2021-town-hall-presentation)
+* [Town Hall Recording](https://youtu.be/TntPVZ4ajIk)
+* [Music Demixing Challenge at ISMIR 2021](https://arxiv.org/abs/2108.13559)
